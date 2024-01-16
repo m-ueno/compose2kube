@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from operator import itemgetter
 from pathlib import Path
 import subprocess
 from tempfile import NamedTemporaryFile
@@ -14,7 +16,8 @@ from langchain_core.runnables import (
 from compose2kube import llm, templates
 from compose2kube.llm import Compose, Manifests
 
-N = 10
+
+N = 20
 MODEL = llm.GPT35TURBO
 
 
@@ -81,7 +84,7 @@ ops = RunnableParallel(
     | enrich_by_llm  # Compose[]
     | (lambda xs: [x for x in xs if isinstance(x, Compose)])
     | (lambda cs: [c.spec for c in cast(list, cs)])  # Compose[] -> str[]
-    | convert_by_kompose.map(),  # ?
+    | convert_by_kompose.map(),
     #
     # method3
     canonical_llm2=canonicalize
@@ -104,36 +107,31 @@ ops = RunnableParallel(
 )
 
 
-# eval chain
-# {input, op, manifests}
+@chain_decorator
+def report(args: dict) -> dict:
+    def compare(target: Manifests, human: Manifests):
+        human.feature()
+        pass
+
+    answer: Manifests = args["answer"]
+    generates = [m for m in args["generates"] if isinstance(m, Manifests)]
+    generates_features = [m.feature() for m in generates]
+
+    return dict(**args, generates_features=generates_features)
 
 
-def get_human_manifest(input):
-    pass
-
-
-def score(args: dict):
-    args["input"]
-    args["manifests"]
-
-
-def compare(target: Manifests, human: Manifests):
-    human.feature()
-    pass
-
-
-# whole chain
-
-chain = (
-    RunnableParallel(
-        input=RunnablePassthrough(),
-        manifests=RunnablePassthrough() | ops,  # key-value
+convert_chain = (
+    # this chain accepts dict { input, answer }
+    RunnablePassthrough.assign(
+        answer=itemgetter("answer") | RunnableLambda(Manifests.from_file),
+        manifests=itemgetter("input") | ops,  # key-value
     )
-    | (
+    | RunnableLambda(
         lambda dic: [
-            {"input": dic["input"], "op": k, "generates": v}
+            {"input": dic["input"], "answer": dic["answer"], "op": k, "generates": v}
             for k, v in dic["manifests"].items()
         ]
-    )  # list of dict {input, op, generates[]}
-    | (lambda xs: xs)
+    )
 )
+
+eval_chain = report.map()

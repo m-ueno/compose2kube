@@ -1,9 +1,11 @@
 import inspect
 import subprocess
 import tempfile
+from typing import Any
 import unittest
 import yaml
 from collections import Counter
+from logging import getLogger
 
 from dotenv import load_dotenv, find_dotenv
 from langchain_openai import ChatOpenAI
@@ -28,13 +30,14 @@ from compose2kube.templates import prompt1_for_kompose, prompt_zeroshot
 
 load_dotenv(find_dotenv())
 set_llm_cache(SQLiteCache(database_path=".langchain.db"))
+logger = getLogger(__name__)
 
 GPT4TURBO = "gpt-4-1106-preview"
 GPT35TURBO = "gpt-3.5-turbo"
 
 
 class Manifests(BaseModel):
-    """Kubernetes manifests container"""
+    """Kubernetes manifests container. Generated and human written."""
 
     manifests: list[str] = Field(
         description="list of YAML manifests. each manifest is a valid YAML file per API object"
@@ -59,17 +62,24 @@ class Manifests(BaseModel):
             m = f.read()
         return Manifests(manifests=[m])
 
-    def canparse(self) -> bool:
-        try:
-            _ = yaml.safe_load_all(self.join())
-            return True
-        except:
-            return False
-
     def join(self) -> str:
         """Returns a single yaml string"""
 
         return "---\n".join(self.manifests)
+
+    def feature(self) -> dict[str, Any]:
+        # マニフェストの特徴抽出
+        dry_run_client_success, client_msg = self.dry_run(False)
+        dry_run_server_success, server_msg = self.dry_run(True)
+        line_length = len(self.join().splitlines())
+        return dict(
+            line_length=line_length,
+            dry_run_client_success=dry_run_client_success,
+            client_msg=client_msg,
+            dry_run_server_success=dry_run_server_success,
+            server_msg=server_msg,
+            **self.count(),
+        )
 
     def dry_run(self, server: bool) -> tuple[bool, str]:
         try:
@@ -90,12 +100,18 @@ class Manifests(BaseModel):
         except subprocess.CalledProcessError as e:
             return False, e.output
 
-    def feature(self) -> dict[str, int]:
-        # マニフェストの「特徴量」を抽出する
-        api_objects = list(yaml.safe_load_all(self.join()))
+    def count(self) -> dict[str, int]:
+        # count api objects
+        api_objects = []
+        try:
+            api_objects = list(yaml.full_load_all(self.join()))
+        except Exception as e:
+            logger.error(e)
         api_objects = filter(lambda x: x is not None, api_objects)
 
-        kinds = [api.get("kind") for api in api_objects]
+        kinds: list[str] = [
+            api.get("kind") for api in api_objects if isinstance(api, dict)
+        ]
         # svc_types = [
         #     f"svc/{api['spec'].get('type')}"
         #     for api in api_objects

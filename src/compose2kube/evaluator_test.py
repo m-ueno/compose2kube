@@ -9,7 +9,7 @@ class TestChain(unittest.TestCase):
         assert True
 
     def test_chain(self):
-        evaluator.chain.invoke("")
+        evaluator.convert_chain.invoke("")
 
     def test_template(self):
         chain = {

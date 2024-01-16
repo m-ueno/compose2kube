@@ -68,7 +68,9 @@ def convert_by_kompose(content: str) -> str:
     tmp.close()
     print(tmp.name)
     cmd = f"kompose convert -f {tmp.name} --stdout --controller=Deployment --volumes persistentVolumeClaim --with-kompose-annotation=false"
-    return subprocess.check_output(cmd, shell=True, universal_newlines=True)
+    return subprocess.check_output(
+        cmd, shell=True, universal_newlines=True, stderr=subprocess.STDOUT
+    )
 
 
 def convert_by_llm(content: str) -> list[str]:
