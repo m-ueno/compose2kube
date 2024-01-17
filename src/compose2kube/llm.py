@@ -149,14 +149,6 @@ class Compose(BaseModel):
     )
 
 
-#
-# tools&prompt -> prompt|llm(tools) -> parser(tools) -> Toolのclass
-# chain1 = prompt.bind(context="") | kompose
-# chain2 = prompt | llm(tools1) | kompose | parse
-# chain3 = prompt | llm(tools2) | parse(tools2)
-#
-
-
 def make_llm_runnable(tools, n: int, model: str, seed=1) -> Runnable:
     """use generate() instead of .invoke() to get n>1 generations"""
 
