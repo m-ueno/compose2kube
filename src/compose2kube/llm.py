@@ -24,6 +24,7 @@ from langchain_core.runnables import (
     chain as chain_decorator,
 )
 import glom
+import joblib
 
 from compose2kube.templates import prompt1_for_kompose, prompt_zeroshot
 
@@ -31,9 +32,32 @@ from compose2kube.templates import prompt1_for_kompose, prompt_zeroshot
 load_dotenv(find_dotenv())
 set_llm_cache(SQLiteCache(database_path=".langchain.db"))
 logger = getLogger(__name__)
+joblib_cachedir = "/tmp/joblibcache"
+memory = joblib.Memory(joblib_cachedir, compress=True)
 
 GPT4TURBO = "gpt-4-1106-preview"
 GPT35TURBO = "gpt-3.5-turbo"
+
+
+@memory.cache
+def _dry_run(spec: str, server: bool) -> tuple[bool, str]:
+    dryrun_opt = "client"
+    if server:
+        dryrun_opt = "server"
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w", prefix="genmani", suffix=".yaml", delete=False
+        ) as f:
+            f.write(spec)
+            f.close()
+            cmd = f"microk8s.kubectl apply -f {f.name} --dry-run={dryrun_opt}"
+            got = subprocess.check_output(
+                cmd, shell=True, universal_newlines=True, stderr=subprocess.STDOUT
+            )
+            return True, got
+    except subprocess.CalledProcessError as e:
+        return False, e.output
 
 
 class Manifests(BaseModel):
@@ -82,23 +106,7 @@ class Manifests(BaseModel):
         )
 
     def dry_run(self, server: bool) -> tuple[bool, str]:
-        try:
-            dryrun_opt = "client"
-            if server:
-                dryrun_opt = "server"
-
-            with tempfile.NamedTemporaryFile(
-                "w", prefix="genmani", suffix=".yaml", delete=False
-            ) as f:
-                f.write(self.join())
-                f.close()
-                cmd = f"microk8s.kubectl apply -f {f.name} --dry-run={dryrun_opt}"
-                got = subprocess.check_output(
-                    cmd, shell=True, universal_newlines=True, stderr=subprocess.STDOUT
-                )
-                return True, got
-        except subprocess.CalledProcessError as e:
-            return False, e.output
+        return _dry_run(spec=self.join(), server=server)
 
     def count(self) -> dict[str, int]:
         # count api objects
