@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 from tempfile import NamedTemporaryFile
 from typing import cast
+import logging
 
 from langchain_core.runnables import (
     Runnable,
@@ -16,9 +17,9 @@ from langchain_core.runnables import (
 from compose2kube import llm, templates
 from compose2kube.llm import Compose, Manifests
 
-
 N = 20
 MODEL = llm.GPT35TURBO
+logger = logging.getLogger(__name__)
 
 
 # 0th layer
