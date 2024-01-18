@@ -67,19 +67,6 @@ class Manifests(BaseModel):
         description="list of YAML manifests. each manifest is a valid YAML file per API object"
     )
 
-    # def report(self) -> dict[str, int]:
-    #     api_objects = []
-    #     for m in self.manifests:
-    #         api_objects += list(yaml.safe_load_all(m))
-
-    #     kinds = [api.get("kind") for api in api_objects]
-    #     svc_types = [
-    #         f"svc/{api['spec'].get('type')}"
-    #         for api in api_objects
-    #         if api.get("kind") == "Service"
-    #     ]
-    #     return {**Counter(kinds), **Counter(svc_types)}
-
     @classmethod
     def from_file(cls, name: str):
         with open(name) as f:
