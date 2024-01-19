@@ -6,6 +6,7 @@ import pickle
 from logging import getLogger
 import logging
 
+from langfuse.callback import CallbackHandler
 from langchain.globals import set_debug, set_verbose
 from compose2kube import evaluator
 
@@ -55,13 +56,26 @@ set_debug(args.debug)
 logger = getLogger(__name__)
 
 
+def setup_langfuse():
+    os.environ["LANGFUSE_HOST"] = "http://localhost:3000"
+    os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-c551be63-507b-4edf-a561-1b2c9d112ee6"
+    os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-f77580cc-1d37-41d1-b1e1-42b809b6b33b"
+    handler = CallbackHandler()
+    if not handler.auth_check():
+        raise RuntimeError("langfuse auth failed")
+    return handler
+
+
+langfuse_handler = setup_langfuse()
+
+
 def convert():
     inputfiles = glob.glob(f"{INPUTROOTDIR}/*/compose.yaml")
     answerfiles = glob.glob(f"{HUMANROOTDIR}/*/all.yaml")
     input = [{"input": k, "answer": v} for k, v in zip(inputfiles, answerfiles)]
     chain = evaluator.convert_chain
 
-    got = chain.batch(input)
+    got = chain.batch(input, config={"callbacks": [langfuse_handler]})
 
     with open(TMPFILE, "wb") as f:
         pickle.dump(got, f)
@@ -74,10 +88,14 @@ def evaluate():
     with open(TMPFILE, "rb") as f:
         got = pickle.load(f)
 
+    # flatten
+    items = sum(got, [])
+
     chain = evaluator.eval_chain
-    got2 = chain.batch(got)
+    got2 = chain.batch(items, config={"callbacks": [langfuse_handler]})
     with open(EVALFILE, "wb") as f:
         pickle.dump(got2, f)
+    logger.info(f"wrote {EVALFILE}")
 
 
 if args.convert:
