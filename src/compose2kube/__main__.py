@@ -6,8 +6,10 @@ import pickle
 from logging import getLogger
 import logging
 
+import langfuse
 from langfuse.callback import CallbackHandler
 from langchain.globals import set_debug, set_verbose
+
 from compose2kube import evaluator
 
 
@@ -55,18 +57,26 @@ set_verbose(args.verbose)
 set_debug(args.debug)
 logger = getLogger(__name__)
 
+langfuse_client = langfuse.Langfuse()
+
 
 def setup_langfuse():
-    os.environ["LANGFUSE_HOST"] = "http://localhost:3000"
-    os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-c551be63-507b-4edf-a561-1b2c9d112ee6"
-    os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-f77580cc-1d37-41d1-b1e1-42b809b6b33b"
+    trace = langfuse_client.trace(name="compose2kube:convert", user_id=__name__)
+    assert trace
+    handler = trace.get_langchain_handler()
+    langfuse.Langfuse.trace
     handler = CallbackHandler()
     if not handler.auth_check():
         raise RuntimeError("langfuse auth failed")
     return handler
 
 
-langfuse_handler = setup_langfuse()
+def get_handler(trace_name: str, user_id: str) -> CallbackHandler:
+    trace = langfuse_client.trace(name=trace_name, user_id=user_id)
+    assert trace
+    handler = trace.get_langchain_handler()
+    assert handler
+    return handler
 
 
 def convert():
@@ -74,8 +84,9 @@ def convert():
     answerfiles = glob.glob(f"{HUMANROOTDIR}/*/all.yaml")
     input = [{"input": k, "answer": v} for k, v in zip(inputfiles, answerfiles)]
     chain = evaluator.convert_chain
+    handler = get_handler(trace_name="compose2kube:convert", user_id=__name__)
 
-    got = chain.batch(input, config={"callbacks": [langfuse_handler]})
+    got = chain.batch(input, config={"callbacks": [handler]})
 
     with open(TMPFILE, "wb") as f:
         pickle.dump(got, f)
@@ -92,7 +103,8 @@ def evaluate():
     items = sum(got, [])
 
     chain = evaluator.eval_chain
-    got2 = chain.batch(items, config={"callbacks": [langfuse_handler]})
+    handler = get_handler(trace_name="compose2kube:evaluate", user_id=__name__)
+    got2 = chain.batch(items, config={"callbacks": [handler]})
     with open(EVALFILE, "wb") as f:
         pickle.dump(got2, f)
     logger.info(f"wrote {EVALFILE}")
