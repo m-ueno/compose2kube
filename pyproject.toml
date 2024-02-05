@@ -24,6 +24,7 @@ matplotlib = "^3.8.2"
 bokeh = "^3.3.3"
 seaborn = "^0.13.1"
 langfuse = "^2.6.4"
+langgraph = "^0.0.16"
 
 [build-system]
 requires = ["poetry-core"]

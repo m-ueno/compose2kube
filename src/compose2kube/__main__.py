@@ -5,6 +5,7 @@ import argparse
 import pickle
 from logging import getLogger
 import logging
+from typing import Optional
 
 import langfuse
 from langfuse.callback import CallbackHandler
@@ -34,6 +35,7 @@ parser.add_argument(
 parser.add_argument("--eval", action="store_true", help="run evaluate chain")
 parser.add_argument("--verbose", "-v", action="store_true")
 parser.add_argument("--debug", action="store_true")
+parser.add_argument("--sessionid", "--sid", type=str, default="c2ksession")
 args = parser.parse_args()
 if not (args.convert or args.eval):
     parser.print_help()
@@ -56,23 +58,19 @@ setup_logger(__name__, loglevel)
 set_verbose(args.verbose)
 set_debug(args.debug)
 logger = getLogger(__name__)
-
 langfuse_client = langfuse.Langfuse()
+if not langfuse_client.auth_check():
+    raise RuntimeError("langfuse auth failed")
+SESSION_ID = args.sessionid
 
 
-def setup_langfuse():
-    trace = langfuse_client.trace(name="compose2kube:convert", user_id=__name__)
-    assert trace
-    handler = trace.get_langchain_handler()
-    langfuse.Langfuse.trace
-    handler = CallbackHandler()
-    if not handler.auth_check():
-        raise RuntimeError("langfuse auth failed")
-    return handler
-
-
-def get_handler(trace_name: str, user_id: str) -> CallbackHandler:
-    trace = langfuse_client.trace(name=trace_name, user_id=user_id)
+def get_handler(
+    trace_name: str, user_id: str, session_id: Optional[str] = None
+) -> CallbackHandler:
+    sess = {}
+    if session_id:
+        sess = {"session_id": session_id}
+    trace = langfuse_client.trace(name=trace_name, user_id=user_id, **sess)  # type: ignore
     assert trace
     handler = trace.get_langchain_handler()
     assert handler
@@ -84,7 +82,9 @@ def convert():
     answerfiles = glob.glob(f"{HUMANROOTDIR}/*/all.yaml")
     input = [{"input": k, "answer": v} for k, v in zip(inputfiles, answerfiles)]
     chain = evaluator.convert_chain
-    handler = get_handler(trace_name="compose2kube:convert", user_id=__name__)
+    handler = get_handler(
+        trace_name="compose2kube:convert", user_id=__name__, session_id=SESSION_ID
+    )
 
     got = chain.batch(input, config={"callbacks": [handler]})
 
@@ -103,7 +103,9 @@ def evaluate():
     items = sum(got, [])
 
     chain = evaluator.eval_chain
-    handler = get_handler(trace_name="compose2kube:evaluate", user_id=__name__)
+    handler = get_handler(
+        trace_name="compose2kube:evaluate", user_id=__name__, session_id=SESSION_ID
+    )
     got2 = chain.batch(items, config={"callbacks": [handler]})
     with open(EVALFILE, "wb") as f:
         pickle.dump(got2, f)

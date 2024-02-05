@@ -1,21 +1,24 @@
-from dataclasses import dataclass
+import logging
+import subprocess
 from operator import itemgetter
 from pathlib import Path
-import subprocess
 from tempfile import NamedTemporaryFile
 from typing import cast
-import logging
 
+from langchain.chains.openai_functions import get_openai_output_parser
 from langchain_core.runnables import (
     Runnable,
     RunnableLambda,
-    RunnablePassthrough,
     RunnableParallel,
+    RunnablePassthrough,
+)
+from langchain_core.runnables import (
     chain as chain_decorator,
 )
+from langchain_openai import ChatOpenAI
 
 from compose2kube import llm, templates
-from compose2kube.llm import Compose, Manifests
+from compose2kube.llm import Compose, Manifests, ManifestScore
 
 N = 20
 MODEL = llm.GPT35TURBO
@@ -112,7 +115,6 @@ ops = RunnableParallel(
 def report(args: dict) -> dict:
     def compare(target: Manifests, human: Manifests):
         human.feature()
-        pass
 
     answer: Manifests = args["answer"]
     generates = [m for m in args["generates"] if isinstance(m, Manifests)]
@@ -129,10 +131,46 @@ convert_chain = (
     )
     | RunnableLambda(
         lambda dic: [
-            {"input": dic["input"], "answer": dic["answer"], "op": k, "generates": v}
-            for k, v in dic["manifests"].items()
+            {"input": dic["input"], "answer": dic["answer"], "op": k, "generates": v}  # type: ignore
+            for k, v in dic["manifests"].items()  # type: ignore
         ]
     )
 )
 
-eval_chain = report.map()
+
+def dict_to_eval_prompt(dic: dict, n_samples: int) -> list[str]:
+    compose_file = dic["input"]
+    compose = Path(compose_file).read_text()
+    gs = dic["generates"]
+    gs: list[Manifests] = [g for g in gs if isinstance(g, Manifests)]
+    specs: list[str] = [g.join() for g in gs][:n_samples]
+    reference = f"""The manifest above is converted from the below compose file:
+
+{compose}
+"""
+
+    return [
+        templates.prompt_eval_manifests_create.format(manifest=s, reference=reference)
+        for s in specs
+    ]
+
+
+eval_chain = RunnableParallel(
+    inputs=RunnablePassthrough(),
+    reports=report,
+    llmeval=(
+        RunnableLambda(
+            lambda dic: dict_to_eval_prompt(dic, n_samples=5)
+        )  # => list of prompts
+        | ChatOpenAI(
+            model=llm.GPT4TURBO,
+            cache=True,
+            temperature=0,
+            model_kwargs={"seed": 1},
+        )
+        .bind_functions(functions=[ManifestScore])
+        .with_fallbacks([RunnableLambda(lambda _: {})])
+        .map()
+        | get_openai_output_parser([ManifestScore]).map()
+    ),
+)

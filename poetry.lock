@@ -1371,6 +1371,20 @@ wrapt = "1.14"
 langchain = ["langchain (>=0.0.309)"]
 
 [[package]]
+name = "langgraph"
+version = "0.0.16"
+description = "langgraph"
+optional = false
+python-versions = ">=3.9.0,<4.0"
+files = [
+    {file = "langgraph-0.0.16-py3-none-any.whl", hash = "sha256:f37445b3aba2e3adde4ff1a2db17c5239cfe6a51c826c77deb1defed42c814cb"},
+    {file = "langgraph-0.0.16.tar.gz", hash = "sha256:445927d1670462cef0366922c2dd4f1882fd575524ca9ff2407d2a2f2d77850c"},
+]
+
+[package.dependencies]
+langchain-core = ">=0.1.8,<0.2.0"
+
+[[package]]
 name = "langsmith"
 version = "0.0.81"
 description = "Client library to connect to the LangSmith LLM Tracing and Evaluation Platform."
@@ -3043,4 +3057,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "83268583c8de758a421c2bbdb8b9d9ad7a769ab92f920eea5e029abe2667bb37"
+content-hash = "c3e2f62b8fc1c553808fbb6068dad764498c44ded854ecc0c57939d9d9ada684"

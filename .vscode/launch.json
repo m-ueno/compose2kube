@@ -9,8 +9,13 @@
             "type": "python",
             "request": "launch",
             "program": "${file}",
+            "args": [
+                "--eval",
+                "--sessionid",
+                "debugger"
+            ],
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": false,
         }
     ]
 }

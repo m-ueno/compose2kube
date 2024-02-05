@@ -1,4 +1,5 @@
 import inspect
+import unittest
 
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -111,4 +112,14 @@ prompt_zeroshot = ChatPromptTemplate.from_messages(
             # - Service
             # - Deployment
             # - PVC (if necessary)
+"""
+
+
+prompt_eval_manifests_create = """You are a skillful devops engineer. Please evaluate the following manifests.
+
+####manifest####
+{manifest}
+
+####Reference####
+{reference}
 """
