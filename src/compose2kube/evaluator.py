@@ -5,6 +5,8 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import cast
 
+import yaml
+from deepdiff import DeepDiff
 from langchain.chains.openai_functions import get_openai_output_parser
 from langchain_core.runnables import (
     Runnable,
@@ -113,14 +115,30 @@ ops = RunnableParallel(
 
 @chain_decorator
 def report(args: dict) -> dict:
-    def compare(target: Manifests, human: Manifests):
-        human.feature()
+    def compare(target: Manifests, human: Manifests) -> dict[str, int]:
+        t1 = list(yaml.full_load_all(target.join()))
+        t2 = list(yaml.full_load_all(human.join()))
+        diff = DeepDiff(
+            t1=t1,
+            t2=t2,
+            exclude_regex_paths=r".*metadata.*",
+            ignore_order=True,
+            get_deep_distance=True,
+            cutoff_intersection_for_pairs=1,
+            cutoff_distance_for_pairs=1,
+        )
+        return dict(deep_distance=diff.get("deep_distance", 0))
 
     answer: Manifests = args["answer"]
     generates = [m for m in args["generates"] if isinstance(m, Manifests)]
     generates_features = [m.feature() for m in generates]
+    compares_to_answer = [compare(m, answer) for m in generates]
 
-    return dict(**args, generates_features=generates_features)
+    return dict(
+        **args,
+        generates_features=generates_features,
+        compares_to_answer=compares_to_answer,
+    )
 
 
 convert_chain = (
@@ -157,20 +175,19 @@ def dict_to_eval_prompt(dic: dict, n_samples: int) -> list[str]:
 
 eval_chain = RunnableParallel(
     inputs=RunnablePassthrough(),
-    reports=report,
-    llmeval=(
-        RunnableLambda(
-            lambda dic: dict_to_eval_prompt(dic, n_samples=5)
-        )  # => list of prompts
-        | ChatOpenAI(
-            model=llm.GPT4TURBO,
-            cache=True,
-            temperature=0,
-            model_kwargs={"seed": 1},
-        )
-        .bind_functions(functions=[ManifestScore])
-        .with_fallbacks([RunnableLambda(lambda _: {})])
-        .map()
-        | get_openai_output_parser([ManifestScore]).map()
-    ),
+    reports=report.with_fallbacks([RunnableLambda(lambda _: {})]),
+    # llmeval=(
+    #     RunnableLambda(
+    #         lambda dic: dict_to_eval_prompt(dic, n_samples=5)
+    #     )  # => list of prompts
+    #     | ChatOpenAI(
+    #         model=llm.GPT4TURBO,
+    #         cache=True,
+    #         temperature=0,
+    #         model_kwargs={"seed": 1},
+    #     )
+    #     .bind_functions(functions=[ManifestScore])
+    #     .map()
+    #     # | get_openai_output_parser([ManifestScore]).map()
+    # ),
 )
