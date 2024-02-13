@@ -71,7 +71,7 @@ class Manifests(BaseModel):
     def join(self) -> str:
         """Returns a single yaml string"""
 
-        return "---\n".join(self.manifests)
+        return "\n---\n".join(self.manifests)
 
     def feature(self) -> dict[str, Any]:
         # マニフェストの特徴抽出
