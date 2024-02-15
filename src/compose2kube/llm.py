@@ -1,33 +1,28 @@
-import inspect
 import subprocess
 import tempfile
-from typing import Any
-import unittest
-import yaml
 from collections import Counter
 from logging import getLogger
+from typing import Any
 
-from dotenv import load_dotenv, find_dotenv
-from langchain_openai import ChatOpenAI
+import glom
+import joblib
+import yaml
+from dotenv import find_dotenv, load_dotenv
 from langchain.cache import SQLiteCache
-from langchain.callbacks.tracers import ConsoleCallbackHandler
-from langchain.chains.openai_functions import convert_to_openai_function
-from langchain.chains.openai_functions import get_openai_output_parser
+from langchain.chains.openai_functions import (
+    convert_to_openai_function,
+    get_openai_output_parser,
+)
 from langchain.globals import set_llm_cache
 from langchain_core.prompt_values import PromptValue
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.runnables import (
     Runnable,
-    RunnableLambda,
-    RunnableParallel,
-    RunnablePassthrough,
+)
+from langchain_core.runnables import (
     chain as chain_decorator,
 )
-import glom
-import joblib
-
-from compose2kube.templates import prompt1_for_kompose, prompt_zeroshot
-
+from langchain_openai import ChatOpenAI
 
 load_dotenv(find_dotenv())
 set_llm_cache(SQLiteCache(database_path=".langchain.db"))
@@ -76,7 +71,7 @@ class Manifests(BaseModel):
     def join(self) -> str:
         """Returns a single yaml string"""
 
-        return "---\n".join(self.manifests)
+        return "\n---\n".join(self.manifests)
 
     def feature(self) -> dict[str, Any]:
         # マニフェストの特徴抽出
@@ -144,6 +139,17 @@ class Compose(BaseModel):
     )
 
 
+class ManifestScore(BaseModel):
+    """the score of manifest"""
+
+    manifest_number: int = Field(description="the number of manifests. e.g. 1")
+    overall_score: int = Field(description="the overall score. e.g. 80", ge=0, le=100)
+    production_readiness_score: int = Field(description="e.g. 80", ge=0, le=100)
+    maintainability_score: int = Field(description="e.g. 80", ge=0, le=100)
+    pros: str = Field(description="the pros of the manifests")
+    cons: str = Field(description="the cons of the manifests")
+
+
 def make_llm_runnable(tools, n: int, model: str, seed=1) -> Runnable:
     """use generate() instead of .invoke() to get n>1 generations"""
 
@@ -181,26 +187,3 @@ def make_llm_runnable(tools, n: int, model: str, seed=1) -> Runnable:
         return parsed
 
     return myllm
-
-
-class TestLLM(unittest.TestCase):
-    def test_generate_n(self):
-        content = """
-        version: '3.8'
-        services:
-          web:
-            build: .
-            ports:
-              - "5000:5000"
-            volumes:
-              - .:/code
-            environment:
-              FLASK_ENV: development
-        """
-        n = 2
-        parsed = make_chain_n(
-            prompt_zeroshot, content, GPT4TURBO, None, tools=[Manifests], n=n
-        )
-        self.assertEqual(len(parsed), n)
-        with self.assertRaises(AssertionError):
-            self.assertListEqual(parsed[0].manifests, parsed[1].manifests)
