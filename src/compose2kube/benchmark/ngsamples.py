@@ -1,4 +1,5 @@
 import json
+from operator import itemgetter
 import re
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -9,7 +10,11 @@ from langchain.cache import SQLiteCache
 from langchain.globals import set_llm_cache
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables import (
+    RunnablePassthrough,
+    ConfigurableField,
+    RunnableLambda,
+)
 from langchain_core.runnables import chain as chain_decorator
 from langfuse.callback import CallbackHandler
 
@@ -404,6 +409,46 @@ INPUTS_JUDGES = [
     ("input9", input9, judge9),
     ("input12", input12, judge12),
 ]
+
+
+def wrap(fn):
+    @chain_decorator
+    def wrapped_fn(arg):
+        try:
+            return fn(arg)
+        except Exception as e:
+            return Judgement(ok=False, metadata={"error": str(e)})
+
+    return wrapped_fn
+
+
+@chain_decorator
+def tap_print(x):
+    print("tap:", x)
+    return x
+
+
+CHAINS = {
+    # receives {compose: str, judge: Callable}
+    "zeroshot-txt": RunnablePassthrough.assign(
+        output={"compose": itemgetter("compose")}
+        | PromptTemplate.from_template(
+            "convert the composefile to kubernetes manifests:\n{compose}"
+        )
+        | ChatOpenAIMultiGenerations(cache=True).configurable_fields(
+            model_name=ConfigurableField(id="model_name"),
+            n=ConfigurableField(id="n", name="llm_n"),
+        )
+    )
+    .assign(  # {compose, judge, output}
+        output_str=itemgetter("output") | StrOutputParser().map(),
+        output_md=itemgetter("output") | MDCodeBlockOutputParser().map(),
+    )
+    .assign(  # {compose, judge, output, output_str, output_md}
+        judged=RunnableLambda(lambda dic: list(map(dic["judge"], dic["output_md"])))
+    )
+    .with_config(run_name="zeroshot-txt", callbacks=[CallbackHandler()])
+}
 
 
 def convert_and_judge_examples(llm_kwargs={}):
