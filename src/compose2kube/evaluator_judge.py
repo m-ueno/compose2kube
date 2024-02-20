@@ -311,10 +311,6 @@ def convert_and_judge_examples(llm_kwargs={}):
     prompt = PromptTemplate.from_template(
         "convert the composefile to kubernetes manifests:\n{compose}"
     )
-    if "model" not in llm_kwargs:
-        llm_kwargs |= {"model": compose2kube.llm.GPT35TURBO}
-    if "n" not in llm_kwargs:
-        llm_kwargs |= {"n": 20}
     chat = ChatOpenAIMultiGenerations(cache=True, **llm_kwargs)
     for name, input, judge in INPUTS_JUDGES:
 
