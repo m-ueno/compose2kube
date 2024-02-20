@@ -1,7 +1,7 @@
 import json
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 import marko
 import yaml
@@ -131,6 +131,106 @@ services:
       timeout: "5s"
       interval: "30s"
 """
+
+
+@dataclass
+class Example:
+    input: str
+    ok: str
+    ng: str | None = None
+
+
+EXAMPLES = [
+    # ex5
+    Example(
+        input="""services:
+  act-sdk_exec:
+    image: ${REGISTRY}/${REPOSITORY}/${MAIN_EXEC_IMAGE}
+    tty: true
+    restart: always
+    ports:
+      - "${GUI_FWD_PORT}:8002" # serverアプリとの通信""",
+        ok="""apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec
+""",
+    ),
+    # ex9
+    Example(
+        input="""services:
+  web:
+    image: $IMAGE_REGISTRY/$IMAGE_REPOSITORY:$IMAGE_VERSION
+    # user: '${UID}:${GID}'
+""",
+        ok="""containers:
+        - name: web
+          image: $IMAGE_REGISTRY/$IMAGE_REPOSITORY:$IMAGE_VERSION
+          # Uncomment the following lines if you want to set the user
+          # securityContext:
+          #   runAsUser: ${UID}
+          #   runAsGroup: ${GID}
+""",
+    ),
+    # ex12
+    Example(
+        input="""services:
+  notebook:
+    ports:
+      - "8888"
+    image: ml-webapp-runner
+    restart: always
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -O - http://127.0.0.1:8888/jupyter/lab || exit 1"
+        ]
+      start_period: "10s"
+      retries: 3
+      timeout: "5s"
+      interval: "30s"
+""",
+        ok="""
+apiVersion: v1
+kind: Service
+metadata:
+  name: notebook
+spec:
+  ports:
+    - protocol: TCP
+      port: 8888
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notebook
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notebook
+  template:
+    metadata:
+      labels:
+        app: notebook
+    spec:
+      containers:
+        - name: notebook
+          image: ml-webapp-runner
+          ports:
+            - containerPort: 8888
+          livenessProbe:
+            httpGet:
+              path: /jupyter/lab
+              port: 8888
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          restartPolicy: Always
+""",
+    ),
+]
 
 
 @dataclass
