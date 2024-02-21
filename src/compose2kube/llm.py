@@ -58,7 +58,7 @@ def _dry_run(spec: str, server: bool) -> tuple[bool, str]:
 class Manifests(BaseModel):
     """Kubernetes manifests container. Generated and human written."""
 
-    manifests: list[str] = Field(
+    manifests: list[str | dict] = Field(
         description="list of YAML manifests. each manifest is a valid YAML file per API object"
     )
 
