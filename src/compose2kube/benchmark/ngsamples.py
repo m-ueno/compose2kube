@@ -438,9 +438,15 @@ def identity(x):
     return x
 
 
-def myparser(obj) -> Manifests:
-    arguments = obj.additional_kwargs.get("function_call", {}).get("arguments")
-    manifests = json.loads(arguments)
+def _join_manifests(xs: list[dict | str]) -> list[str]:
+    # compose.llm.Manifests.manifests: list[str|dict] にした結果のその場しのぎの関数
+    child = xs[0]
+    if isinstance(child, dict):
+        return yaml.safe_dump_all(xs)
+    elif isinstance(child, str):
+        return "\n---\n".join(xs)
+    else:
+        raise ValueError(f"argument must be list[dit|str]: {xs}")
 
 
 CHAINS = {
@@ -478,10 +484,8 @@ CHAINS = {
             cache=True,
             model_kwargs={
                 "seed": 1,
-                "tools": [{"type": "function", "function": convert_to_openai_function(Manifests)}],
-                "tool_choice": {"type": "function", "function": {"name": "Manifests"}},
-                # "functions": [convert_to_openai_function(Manifests)],
-                # "function_call": {"name": "Manifests"},
+                "functions": [convert_to_openai_function(Manifests)],
+                "function_call": {"name": "Manifests"},
             },
         ).configurable_fields(
             model_name=ConfigurableField(id="model_name"),
@@ -492,7 +496,8 @@ CHAINS = {
         output_json=itemgetter("output")
         | (
             get_openai_output_parser([Manifests])
-            | (lambda ms: "\n---\n".join(ms.manifests))
+            | (lambda m: m.manifests)
+            | _join_manifests
         )
         .with_fallbacks([RunnableLambda(lambda _: "parse failed")])
         .map(),
