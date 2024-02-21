@@ -22,7 +22,6 @@ from langchain_core.runnables import (
     RunnablePassthrough,
 )
 from langchain_core.runnables import chain as chain_decorator
-from langfuse.callback import CallbackHandler
 
 from compose2kube.evaluator import Manifests
 from compose2kube.model import ChatOpenAIMultiGenerations
@@ -472,7 +471,7 @@ CHAINS = {
     .assign(  # {compose, judge, output, output_str, output_md}
         judged=RunnableLambda(lambda dic: list(map(dic["judge"], dic["output_md"])))
     )
-    .with_config(run_name="zeroshot-txt", callbacks=[CallbackHandler()]),
+    .with_config(run_name="zeroshot-txt"),
     #
     # chain2
     "zeroshot-jsonmode": RunnablePassthrough.assign(
@@ -536,7 +535,7 @@ def convert_and_judge_examples(llm_kwargs={}):
                 converted=StrOutputParser().map(),
                 judge=(MDCodeBlockOutputParser() | wrap(judge)).map(),
             )
-        ).with_config(config=RunnableConfig(callbacks=[CallbackHandler()]))
+        )
         got = chain.invoke(input)
         results[name] = got
 
