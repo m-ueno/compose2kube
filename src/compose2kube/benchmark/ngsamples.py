@@ -5,6 +5,7 @@ from operator import itemgetter
 from typing import Any, Optional
 
 import marko
+import marko.inline
 import yaml
 from langchain.cache import SQLiteCache
 from langchain.chains.openai_functions import (
@@ -16,14 +17,13 @@ from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import (
     ConfigurableField,
+    RunnableConfig,
     RunnableLambda,
     RunnablePassthrough,
 )
 from langchain_core.runnables import chain as chain_decorator
 from langfuse.callback import CallbackHandler
 
-import compose2kube
-import compose2kube.llm
 from compose2kube.evaluator import Manifests
 from compose2kube.model import ChatOpenAIMultiGenerations
 
@@ -41,6 +41,7 @@ class MDCodeBlockOutputParser(StrOutputParser):
         doc = marko.parse(text)
         for element in doc.children:
             if isinstance(element, marko.block.FencedCode):
+                assert isinstance(element.children[0], marko.inline.RawText)
                 return element.children[0].children
         raise ValueError("the text contains ``` but not match any codeblock" + text)
 
@@ -252,9 +253,9 @@ class Judgement:
         return json.dumps(self.__dict__)
 
 
-def judge3(manifests: str) -> Judgement:
+def judge3(manifests_str: str) -> Judgement:
     try:
-        manifests = yaml.safe_load_all(manifests)
+        manifests = yaml.safe_load_all(manifests_str)
         for manifest in manifests:
             if manifest.get("kind") == "Service":
                 continue
@@ -438,13 +439,13 @@ def identity(x):
     return x
 
 
-def _join_manifests(xs: list[dict | str]) -> list[str]:
+def _join_manifests(xs: list[dict | str]) -> str:
     # compose.llm.Manifests.manifests: list[str|dict] にした結果のその場しのぎの関数
     child = xs[0]
     if isinstance(child, dict):
         return yaml.safe_dump_all(xs)
     elif isinstance(child, str):
-        return "\n---\n".join(xs)
+        return "\n---\n".join(xs)  # type:ignore
     else:
         raise ValueError(f"argument must be list[dit|str]: {xs}")
 
@@ -535,7 +536,7 @@ def convert_and_judge_examples(llm_kwargs={}):
                 converted=StrOutputParser().map(),
                 judge=(MDCodeBlockOutputParser() | wrap(judge)).map(),
             )
-        ).with_config(config=dict(callbacks=[CallbackHandler()]))
+        ).with_config(config=RunnableConfig(callbacks=[CallbackHandler()]))
         got = chain.invoke(input)
         results[name] = got
 
