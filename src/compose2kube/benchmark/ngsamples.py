@@ -1,25 +1,30 @@
 import json
-from operator import itemgetter
 import re
 from dataclasses import dataclass
+from operator import itemgetter
 from typing import Any, Optional
 
 import marko
 import yaml
 from langchain.cache import SQLiteCache
+from langchain.chains.openai_functions import (
+    convert_to_openai_function,
+    get_openai_output_parser,
+)
 from langchain.globals import set_llm_cache
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import (
-    RunnablePassthrough,
     ConfigurableField,
     RunnableLambda,
+    RunnablePassthrough,
 )
 from langchain_core.runnables import chain as chain_decorator
 from langfuse.callback import CallbackHandler
 
 import compose2kube
 import compose2kube.llm
+from compose2kube.evaluator import Manifests
 from compose2kube.model import ChatOpenAIMultiGenerations
 
 set_llm_cache(SQLiteCache())
@@ -428,7 +433,21 @@ def tap_print(x):
     return x
 
 
+@chain_decorator
+def identity(x):
+    return x
+
+def myparser(obj) -> Manifests:
+    arguments = obj.additional_kwargs.get("function_call", {}).get("arguments")
+    manifests = json.loads(arguments)
+
+
+
+
 CHAINS = {
+    #
+    # chain 1
+    #
     # receives {compose: str, judge: Callable}
     "zeroshot-txt": RunnablePassthrough.assign(
         output={"compose": itemgetter("compose")}
@@ -447,7 +466,39 @@ CHAINS = {
     .assign(  # {compose, judge, output, output_str, output_md}
         judged=RunnableLambda(lambda dic: list(map(dic["judge"], dic["output_md"])))
     )
-    .with_config(run_name="zeroshot-txt", callbacks=[CallbackHandler()])
+    .with_config(run_name="zeroshot-txt", callbacks=[CallbackHandler()]),
+    #
+    # chain2
+    "zeroshot-jsonmode": RunnablePassthrough.assign(
+        output={"compose": itemgetter("compose")}
+        | PromptTemplate.from_template(
+            "convert the composefile to kubernetes manifests:\n{{compose}}",
+            template_format="jinja2",
+        )
+        | ChatOpenAIMultiGenerations(
+            cache=True,
+            model_kwargs={
+                "seed": 1,
+                "functions": [convert_to_openai_function(Manifests)],
+            },
+        ).configurable_fields(
+            model_name=ConfigurableField(id="model_name"),
+            n=ConfigurableField(id="n", name="llm_n"),
+        )
+    )
+    .assign(  # {compose, judge, output}
+        output_json=itemgetter("output")
+        | (
+            get_openai_output_parser([Manifests])
+            | (lambda ms: "\n---\n".join(ms.manifests))
+        )
+        .with_fallbacks([RunnableLambda(lambda _: "parse failed")])
+        .map(),
+    )
+    .assign(  # {compose, judge, output, output_json}
+        judged=RunnableLambda(lambda dic: list(map(dic["judge"], dic["output_json"])))
+    )
+    .with_fallbacks([identity]),
 }
 
 
