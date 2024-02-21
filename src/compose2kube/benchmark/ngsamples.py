@@ -437,11 +437,10 @@ def tap_print(x):
 def identity(x):
     return x
 
+
 def myparser(obj) -> Manifests:
     arguments = obj.additional_kwargs.get("function_call", {}).get("arguments")
     manifests = json.loads(arguments)
-
-
 
 
 CHAINS = {
@@ -479,7 +478,10 @@ CHAINS = {
             cache=True,
             model_kwargs={
                 "seed": 1,
-                "functions": [convert_to_openai_function(Manifests)],
+                "tools": [{"type": "function", "function": convert_to_openai_function(Manifests)}],
+                "tool_choice": {"type": "function", "function": {"name": "Manifests"}},
+                # "functions": [convert_to_openai_function(Manifests)],
+                # "function_call": {"name": "Manifests"},
             },
         ).configurable_fields(
             model_name=ConfigurableField(id="model_name"),
