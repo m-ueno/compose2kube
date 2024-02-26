@@ -50,7 +50,9 @@ def convert(session_id):
         trace_name="compose2kube:convert", user_id=__name__, session_id=session_id
     )
 
-    got = chain.batch(input, config={"callbacks": [handler]})
+    # Because langfuse doesn't support .batch(),
+    # use .map().invoke() instead for a while.
+    got = chain.map().invoke(input, config={"callbacks": [handler]})
 
     with open(TMPFILE, "wb") as f:
         pickle.dump(got, f)

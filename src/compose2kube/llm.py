@@ -30,7 +30,9 @@ logger = getLogger(__name__)
 joblib_cachedir = "/tmp/joblibcache"
 memory = joblib.Memory(joblib_cachedir, compress=True)
 
-GPT4TURBO = "gpt-4-1106-preview"
+GPT4_1106 = "gpt-4-1106-preview"
+GPT4_0125 = "gpt-4-0125-preview"
+GPT4TURBO = GPT4_0125
 GPT35TURBO = "gpt-3.5-turbo"
 
 
