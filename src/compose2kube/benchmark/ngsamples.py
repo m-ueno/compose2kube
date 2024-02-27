@@ -14,7 +14,7 @@ from langchain.chains.openai_functions import (
 )
 from langchain.globals import set_llm_cache
 from langchain.prompts import PromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langchain_core.runnables import (
     ConfigurableField,
     RunnableConfig,
@@ -22,6 +22,7 @@ from langchain_core.runnables import (
     RunnablePassthrough,
 )
 from langchain_core.runnables import chain as chain_decorator
+from langchain_openai import ChatOpenAI
 
 from compose2kube.evaluator import Manifests
 from compose2kube.model import ChatOpenAIMultiGenerations
@@ -407,6 +408,46 @@ def judge9(manifests: str) -> Judgement:
         )
 
 
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    HumanMessagePromptTemplate,
+    SystemMessagePromptTemplate,
+)
+
+prompt_grader = ChatPromptTemplate.from_messages(
+    messages=[
+        SystemMessagePromptTemplate.from_template(
+            """Your primary concern is making sure that given the compose file, the generated kubernetes manifests are correct."""
+        ),
+        HumanMessagePromptTemplate.from_template(
+            """
+Judge if kubernetes manifests are correctly converted from the given compose file.
+If correct then the decision is 'Y' otherwise 'N'.
+Separate the decision and the explanation. For example:
+{
+    "decision": "Y",
+    "explanation": "..."
+}
+
+####Manifest####
+
+{{ manifest }}
+
+####Compose####
+
+{{ compose }}""",
+            template_format="jinja2",
+        ),
+    ],
+)
+
+# receive {compose, manifest}
+chain_grader = (
+    prompt_grader
+    | ChatOpenAI(cache=True, model_kwargs={"seed": 1}, temperature=0).with_retry()
+    | JsonOutputParser(name="grader parser")
+).with_config(run_name="chain_grader")
+
 INPUTS_JUDGES = [
     ("input3", input3, judge3),
     ("input4", input4, judge4),
@@ -468,8 +509,14 @@ CHAINS = {
         output_str=itemgetter("output") | StrOutputParser().map(),
         output_md=itemgetter("output") | MDCodeBlockOutputParser().map(),
     )
-    .assign(  # {compose, judge, output, output_str, output_md}
-        judged=RunnableLambda(lambda dic: list(map(dic["judge"], dic["output_md"])))
+    .assign(
+        _in_out_pairs=lambda dic: [
+            {"compose": dic["compose"], "manifest": m} for m in dic["output_str"]
+        ]
+    )
+    .assign(model_graded=itemgetter("_in_out_pairs") | chain_grader.map())
+    .assign(  # {compose, judge, output, output_str, output_md, model_graded}
+        judged=RunnableLambda(lambda dic: list(map(dic["judge"], dic["output_md"]))),
     )
     .with_config(run_name="zeroshot-txt"),
     #
@@ -505,6 +552,7 @@ CHAINS = {
     .assign(  # {compose, judge, output, output_json}
         judged=RunnableLambda(lambda dic: list(map(dic["judge"], dic["output_json"])))
     )
+    .assign(model_graded=itemgetter("output") | chain_grader.map())
     .with_fallbacks([identity]),
 }
 
