@@ -19,6 +19,7 @@ from langchain_core.runnables import (
     ConfigurableField,
     RunnableConfig,
     RunnableLambda,
+    RunnableParallel,
     RunnablePassthrough,
 )
 from langchain_core.runnables import chain as chain_decorator
@@ -549,10 +550,15 @@ CHAINS = {
         .with_fallbacks([RunnableLambda(lambda _: "parse failed")])
         .map(),
     )
+    .assign(
+        _in_out_pairs=lambda dic: [
+            {"compose": dic["compose"], "manifest": m} for m in dic["output_json"]
+        ]
+    )
+    .assign(model_graded=itemgetter("_in_out_pairs") | chain_grader.map())
     .assign(  # {compose, judge, output, output_json}
         judged=RunnableLambda(lambda dic: list(map(dic["judge"], dic["output_json"])))
     )
-    .assign(model_graded=itemgetter("output") | chain_grader.map())
     .with_fallbacks([identity]),
 }
 
