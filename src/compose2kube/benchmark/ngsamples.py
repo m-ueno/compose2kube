@@ -15,6 +15,11 @@ from langchain.chains.openai_functions import (
 from langchain.globals import set_llm_cache
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    HumanMessagePromptTemplate,
+    SystemMessagePromptTemplate,
+)
 from langchain_core.runnables import (
     ConfigurableField,
     RunnableConfig,
@@ -408,12 +413,6 @@ def judge9(manifests: str) -> Judgement:
             ok=False, metadata={"message": "Not all required comments are included."}
         )
 
-
-from langchain_core.prompts import (
-    ChatPromptTemplate,
-    HumanMessagePromptTemplate,
-    SystemMessagePromptTemplate,
-)
 
 prompt_grader = ChatPromptTemplate.from_messages(
     messages=[
