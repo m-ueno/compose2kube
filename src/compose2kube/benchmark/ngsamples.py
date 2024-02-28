@@ -445,8 +445,12 @@ Separate the decision and the explanation. For example:
 # receive {compose, manifest}
 chain_grader = (
     prompt_grader
-    | ChatOpenAI(cache=True, model_kwargs={"seed": 1}, temperature=0).with_retry()
-    | JsonOutputParser(name="grader parser")
+    | ChatOpenAI(cache=True, model_kwargs={"seed": 1}, temperature=0)
+    .configurable_fields(model_name=ConfigurableField(id="grader_model_name"))
+    .with_retry()
+    | JsonOutputParser(name="grader parser").with_fallbacks(
+        [RunnableLambda(lambda _: {"decision": "N", "explanation": "parse failed"})]
+    )
 ).with_config(run_name="chain_grader")
 
 INPUTS_JUDGES = [
@@ -513,7 +517,9 @@ chains_convert_grade = RunnableParallel(
         | PromptTemplate.from_template(
             "convert the composefile to kubernetes manifests:\n{compose}"
         )
-        | ChatOpenAIMultiGenerations(cache=True).configurable_fields(
+        | ChatOpenAIMultiGenerations(
+            cache=True, model_kwargs={"seed": 1}
+        ).configurable_fields(
             model_name=ConfigurableField(id="model_name"),
             n=ConfigurableField(id="n", name="llm_n"),
         )
