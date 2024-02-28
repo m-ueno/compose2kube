@@ -491,12 +491,24 @@ def _join_manifests(xs: list[dict | str]) -> str:
         raise ValueError(f"argument must be list[dit|str]: {xs}")
 
 
-CHAINS = {
+# receive {compose, judge, output_parsed}
+chains_grade = RunnableParallel(
+    grade_by_function=lambda dic: list(map(dic["judge"], dic["output_parsed"])),  # type: ignore
+    grade_by_model=RunnablePassthrough.assign(
+        _in_out_pairs=lambda dic: [
+            {"compose": dic["compose"], "manifest": m} for m in dic["output_parsed"]
+        ]
+    ).assign(model_graded=itemgetter("_in_out_pairs") | chain_grader.map()),
+).assign(
+    grade_by_function_only_model_passed=RunnablePassthrough(),
+)
+
+# さまざまなメソッドからなるチェーン
+chains_convert_grade = RunnableParallel(
     #
-    # chain 1
+    # Method1
     #
-    # receives {compose: str, judge: Callable}
-    "zeroshot-txt": RunnablePassthrough.assign(
+    zeroshot_txt=RunnablePassthrough.assign(
         output={"compose": itemgetter("compose")}
         | PromptTemplate.from_template(
             "convert the composefile to kubernetes manifests:\n{compose}"
@@ -508,21 +520,14 @@ CHAINS = {
     )
     .assign(  # {compose, judge, output}
         output_str=itemgetter("output") | StrOutputParser().map(),
-        output_md=itemgetter("output") | MDCodeBlockOutputParser().map(),
+        output_parsed=itemgetter("output") | MDCodeBlockOutputParser().map(),
     )
-    .assign(
-        _in_out_pairs=lambda dic: [
-            {"compose": dic["compose"], "manifest": m} for m in dic["output_str"]
-        ]
-    )
-    .assign(model_graded=itemgetter("_in_out_pairs") | chain_grader.map())
-    .assign(  # {compose, judge, output, output_str, output_md, model_graded}
-        judged=RunnableLambda(lambda dic: list(map(dic["judge"], dic["output_md"]))),
-    )
-    .with_config(run_name="zeroshot-txt"),
+    .pick(["compose", "judge", "output", "output_str", "output_parsed"])
+    | chains_grade,
     #
-    # chain2
-    "zeroshot-jsonmode": RunnablePassthrough.assign(
+    # Method2: JSON mode
+    #
+    zeroshot_jsonmode=RunnablePassthrough.assign(
         output={"compose": itemgetter("compose")}
         | PromptTemplate.from_template(
             "convert the composefile to kubernetes manifests:\n{{compose}}",
@@ -541,7 +546,7 @@ CHAINS = {
         )
     )
     .assign(  # {compose, judge, output}
-        output_json=itemgetter("output")
+        output_parsed=itemgetter("output")
         | (
             get_openai_output_parser([Manifests])
             | (lambda m: m.manifests)
@@ -550,50 +555,6 @@ CHAINS = {
         .with_fallbacks([RunnableLambda(lambda _: "parse failed")])
         .map(),
     )
-    .assign(
-        _in_out_pairs=lambda dic: [
-            {"compose": dic["compose"], "manifest": m} for m in dic["output_json"]
-        ]
-    )
-    .assign(model_graded=itemgetter("_in_out_pairs") | chain_grader.map())
-    .assign(  # {compose, judge, output, output_json}
-        judged=RunnableLambda(lambda dic: list(map(dic["judge"], dic["output_json"])))
-    )
-    .with_fallbacks([identity]),
-}
-
-
-def convert_and_judge_examples(llm_kwargs={}):
-    results = {}
-    prompt = PromptTemplate.from_template(
-        "convert the composefile to kubernetes manifests:\n{compose}"
-    )
-    chat = ChatOpenAIMultiGenerations(cache=True, **llm_kwargs)
-    for name, input, judge in INPUTS_JUDGES:
-
-        def wrap(fn):
-            @chain_decorator
-            def wrapped_fn(arg):
-                try:
-                    return fn(arg)
-                except Exception as e:
-                    return Judgement(ok=False, metadata={"error": str(e)})
-
-            return wrapped_fn
-
-        chain = (
-            {"compose": RunnablePassthrough()}
-            | prompt
-            | chat
-            | dict(
-                converted=StrOutputParser().map(),
-                judge=(MDCodeBlockOutputParser() | wrap(judge)).map(),
-            )
-        )
-        got = chain.invoke(input)
-        results[name] = got
-
-    return results
-
-
-__all__ = ["convert_and_judge_examples"]
+    .pick(["compose", "judge", "output", "output_parsed"])
+    | chains_grade,
+)
