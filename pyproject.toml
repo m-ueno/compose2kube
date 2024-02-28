@@ -29,6 +29,7 @@ seaborn = "^0.13.1"
 langfuse = "^2.6.4"
 langgraph = "^0.0.16"
 exceptiongroup = "^1.2.0"
+notebook = "^7.1.1"
 
 [build-system]
 requires = ["poetry-core"]
