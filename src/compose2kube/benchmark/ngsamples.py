@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from operator import itemgetter
 from typing import Any, Optional
 
-import marko
-import marko.inline
 import yaml
 from langchain.cache import SQLiteCache
 from langchain.chains.openai_functions import (
@@ -14,8 +12,7 @@ from langchain.chains.openai_functions import (
 )
 from langchain.globals import set_llm_cache
 from langchain.prompts import PromptTemplate
-from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
-
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import (
     ConfigurableField,
     RunnableLambda,
@@ -24,27 +21,12 @@ from langchain_core.runnables import (
 )
 from langchain_core.runnables import chain as chain_decorator
 
+from compose2kube.benchmark.grader import chain_grader, prompt_grader
+from compose2kube.benchmark.parser import MDCodeBlockOutputParser
 from compose2kube.evaluator import Manifests
 from compose2kube.model import ChatOpenAIMultiGenerations
-from compose2kube.benchmark.grader import prompt_grader, chain_grader
 
 set_llm_cache(SQLiteCache())
-
-
-class MDCodeBlockOutputParser(StrOutputParser):
-    def parse(self, text: str) -> str:
-        if "```" not in text:
-            return text
-        if "```yaml" not in text:
-            # Found the start of a code block (```), but the end is missing.
-            # Then, just delete it.
-            return text.replace("```", "")
-        doc = marko.parse(text)
-        for element in doc.children:
-            if isinstance(element, marko.block.FencedCode):
-                assert isinstance(element.children[0], marko.inline.RawText)
-                return element.children[0].children
-        raise ValueError("the text contains ``` but not match any codeblock" + text)
 
 
 input3 = """
