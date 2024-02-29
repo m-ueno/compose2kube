@@ -63,7 +63,7 @@ def kompose(spec: Document) -> Document:
             return Document(page_content=stdout, metadata=dict(stderr=stderr))
 
 
-chain_textmode_kompose = (
+chain_annotate_kompose = (
     {"input": lambda doc: doc.page_content, "target": lambda _: "AWS EKS"}
     | templates.prompt1_for_kompose
     | ChatOpenAIMultiGenerations(
@@ -74,7 +74,7 @@ chain_textmode_kompose = (
     | (MDCodeBlockOutputParser() | kompose).map()
 )
 
-chain_canonical_textmode_kompose = canonicalize | chain_textmode_kompose
+chain_canonical_annotate_kompose = canonicalize | chain_annotate_kompose
 
 
 @chain_decorator
@@ -103,7 +103,7 @@ chain_zeroshottext = (
 #
 # input is a Document, output is a List[Document]
 CONVERT_METHODS = dict(
-    textmode_kompose=chain_textmode_kompose,
-    canonical_textmode_kompose=chain_canonical_textmode_kompose,
+    annotate_kompose=chain_annotate_kompose,
+    canonical_annotate_kompose=chain_canonical_annotate_kompose,
     zeroshottext=chain_zeroshottext,
 )
