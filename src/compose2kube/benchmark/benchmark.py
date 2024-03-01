@@ -355,7 +355,7 @@ def judge12(manifests: str) -> Judgement:
             ok=False,
             metadata={
                 "message": "No probe with /jupyter/lab found",
-                "probe": probe,
+                "probe": probe if "probe" in locals() else None,
             },
         )
     except Exception as e:
