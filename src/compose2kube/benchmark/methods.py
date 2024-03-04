@@ -6,8 +6,9 @@ from langchain.prompts import PromptTemplate
 from langchain_core.documents import Document
 from langchain_core.runnables import (
     ConfigurableField,
-    RunnableLambda,
-    RunnablePassthrough,
+    RunnableLambda,  # noqa: F401
+    RunnablePassthrough,  # noqa: F401
+    RunnableSerializable,
 )
 from langchain_core.runnables import (
     chain as chain_decorator,
@@ -60,26 +61,31 @@ def kompose(spec: Document) -> Document:
             encoding="utf-8",
         ) as proc:
             stdout, stderr = proc.communicate()
-            return Document(page_content=stdout, metadata=dict(stderr=stderr))
-
-
-chain_annotate_kompose = (
-    {"input": lambda doc: doc.page_content, "target": lambda _: "AWS EKS"}
-    | templates.prompt1_for_kompose
-    | ChatOpenAIMultiGenerations(
-        cache=True, model_kwargs={"seed": 1}
-    ).configurable_fields(
-        n=ConfigurableField(id="n"), model_name=ConfigurableField(id="model_name")
-    )
-    | (MDCodeBlockOutputParser() | kompose).map()
-)
-
-chain_canonical_annotate_kompose = canonicalize | chain_annotate_kompose
+            return Document(
+                page_content=stdout, metadata=dict(stderr=stderr, orig_spec=spec)
+            )
 
 
 @chain_decorator
 def to_doc(page_content: str, **kwargs) -> Document:
     return Document(page_content=page_content, **kwargs)
+
+
+# receive Document, return Documents
+chain_annotate: RunnableSerializable[Document, list[Document]] = (
+    {"input": lambda doc: doc.page_content, "target": lambda _: "AWS EKS"}
+    | templates.prompt1_for_kompose
+    | ChatOpenAIMultiGenerations(
+        cache=True, model_kwargs={"seed": 1}
+    ).configurable_fields(
+        n=ConfigurableField(id="annotate_n"),
+        model_name=ConfigurableField(id="annotate_model_name"),
+    )
+    | (MDCodeBlockOutputParser() | to_doc).map()
+)
+
+chain_annotate_kompose = chain_annotate | kompose.map()
+chain_canonical_annotate_kompose = canonicalize | chain_annotate | kompose.map()
 
 
 #
