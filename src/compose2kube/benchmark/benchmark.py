@@ -443,8 +443,6 @@ chains_grade = RunnablePassthrough.assign(
             {"compose": dic["compose"], "manifest": m} for m in dic["output_parsed"]
         ]
     ).assign(model_graded=itemgetter("_in_out_pairs") | chain_grader.map()),
-).assign(
-    grade_by_function_only_model_passed=RunnablePassthrough(),
 )
 
 # さまざまなメソッドからなるチェーン
