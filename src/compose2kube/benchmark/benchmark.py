@@ -2,10 +2,10 @@ import json
 import re
 from dataclasses import dataclass
 from operator import itemgetter
+import subprocess
+import tempfile
 from typing import Any, Optional
 
-import marko
-import marko.inline
 import yaml
 from langchain.cache import SQLiteCache
 from langchain.chains.openai_functions import (
@@ -14,37 +14,22 @@ from langchain.chains.openai_functions import (
 )
 from langchain.globals import set_llm_cache
 from langchain.prompts import PromptTemplate
-from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import (
     ConfigurableField,
-    RunnableConfig,
     RunnableLambda,
     RunnableParallel,
     RunnablePassthrough,
 )
 from langchain_core.runnables import chain as chain_decorator
-from langchain_openai import ChatOpenAI
 
+from compose2kube.benchmark.grader import chain_grader, prompt_grader
+from compose2kube.benchmark.parser import MDCodeBlockOutputParser
+from compose2kube.benchmark.methods import CONVERT_METHODS, to_doc
 from compose2kube.evaluator import Manifests
 from compose2kube.model import ChatOpenAIMultiGenerations
 
 set_llm_cache(SQLiteCache())
-
-
-class MDCodeBlockOutputParser(StrOutputParser):
-    def parse(self, text: str) -> str:
-        if "```" not in text:
-            return text
-        if "```yaml" not in text:
-            # Found the start of a code block (```), but the end is missing.
-            # Then, just delete it.
-            return text.replace("```", "")
-        doc = marko.parse(text)
-        for element in doc.children:
-            if isinstance(element, marko.block.FencedCode):
-                assert isinstance(element.children[0], marko.inline.RawText)
-                return element.children[0].children
-        raise ValueError("the text contains ``` but not match any codeblock" + text)
 
 
 input3 = """
@@ -373,7 +358,7 @@ def judge12(manifests: str) -> Judgement:
             ok=False,
             metadata={
                 "message": "No probe with /jupyter/lab found",
-                "probe": probe,
+                "probe": probe if "probe" in locals() else None,
             },
         )
     except Exception as e:
@@ -408,50 +393,6 @@ def judge9(manifests: str) -> Judgement:
             ok=False, metadata={"message": "Not all required comments are included."}
         )
 
-
-from langchain_core.prompts import (
-    ChatPromptTemplate,
-    HumanMessagePromptTemplate,
-    SystemMessagePromptTemplate,
-)
-
-prompt_grader = ChatPromptTemplate.from_messages(
-    messages=[
-        SystemMessagePromptTemplate.from_template(
-            """Your primary concern is making sure that given the compose file, the generated kubernetes manifests are correct."""
-        ),
-        HumanMessagePromptTemplate.from_template(
-            """
-Judge if kubernetes manifests are correctly converted from the given compose file.
-If correct then the decision is 'Y' otherwise 'N'.
-Separate the decision and the explanation. For example:
-{
-    "decision": "Y",
-    "explanation": "..."
-}
-
-####Manifest####
-
-{{ manifest }}
-
-####Compose####
-
-{{ compose }}""",
-            template_format="jinja2",
-        ),
-    ],
-)
-
-# receive {compose, manifest}
-chain_grader = (
-    prompt_grader
-    | ChatOpenAI(cache=True, model_kwargs={"seed": 1}, temperature=0)
-    .configurable_fields(model_name=ConfigurableField(id="grader_model_name"))
-    .with_retry()
-    | JsonOutputParser(name="grader parser").with_fallbacks(
-        [RunnableLambda(lambda _: {"decision": "N", "explanation": "parse failed"})]
-    )
-).with_config(run_name="chain_grader")
 
 INPUTS_JUDGES = [
     ("input3", input3, judge3),
@@ -495,19 +436,44 @@ def _join_manifests(xs: list[dict | str]) -> str:
         raise ValueError(f"argument must be list[dit|str]: {xs}")
 
 
+@chain_decorator
+def dryrun_str(manifests: str) -> Judgement:
+    """execute kubectl apply --dry-run=server"""
+
+    # generate tmpfile
+    with tempfile.NamedTemporaryFile(
+        "w", prefix="dryrun", suffix=".yaml", delete=False
+    ) as f:
+        f.write(manifests)
+        f.close()
+        # get stdout and stderr separately using pipe
+        with subprocess.Popen(
+            f"kubectl apply -f {f.name} --dry-run=server",
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            encoding="utf-8",
+        ) as proc:
+            stdout, stderr = proc.communicate()
+            return Judgement(
+                ok=proc.returncode == 0, metadata=dict(stdout=stdout, stderr=stderr)
+            )
+
+
+# 複数の評価 (Correctness, groundness) をするチェーン
 # receive {compose, judge, output_parsed}
-chains_grade = RunnableParallel(
+chains_grade = RunnablePassthrough.assign(
     grade_by_function=lambda dic: list(map(dic["judge"], dic["output_parsed"])),  # type: ignore
     grade_by_model=RunnablePassthrough.assign(
         _in_out_pairs=lambda dic: [
             {"compose": dic["compose"], "manifest": m} for m in dic["output_parsed"]
         ]
     ).assign(model_graded=itemgetter("_in_out_pairs") | chain_grader.map()),
-).assign(
-    grade_by_function_only_model_passed=RunnablePassthrough(),
+    grade_by_dryrun=itemgetter("output_parsed") | dryrun_str.map(),
 )
 
 # さまざまなメソッドからなるチェーン
+# receive {compose, judge}
 chains_convert_grade = RunnableParallel(
     #
     # Method1
@@ -563,4 +529,30 @@ chains_convert_grade = RunnableParallel(
     )
     .pick(["compose", "judge", "output", "output_parsed"])
     | chains_grade,
+    #
+    # Method3: annotate -> kompose
+    # annotate_kompose=RunnablePassthrough.assign(
+    #     output_with_metadata=itemgetter("compose")
+    #     | to_doc
+    #     | CONVERT_METHODS["annotate_kompose"],
+    # )
+    # .assign(
+    #     output_parsed=itemgetter("output_with_metadata")
+    #     | RunnableLambda(lambda doc: doc.page_content).map()
+    # )
+    # .pick(["compose", "judge", "output_with_metadata", "output_parsed"])
+    # | chains_grade,
+    # #
+    # # Method4: 正規化してからmethod3
+    # canonicalize_annotate_kompose=RunnablePassthrough.assign(
+    #     output_with_metadata=itemgetter("compose")
+    #     | to_doc
+    #     | CONVERT_METHODS["canonical_annotate_kompose"],
+    # )
+    # .assign(
+    #     output_parsed=itemgetter("output_with_metadata")
+    #     | RunnableLambda(lambda doc: doc.page_content).map()
+    # )
+    # .pick(["compose", "judge", "output_with_metadata", "output_parsed"])
+    # | chains_grade,
 )
