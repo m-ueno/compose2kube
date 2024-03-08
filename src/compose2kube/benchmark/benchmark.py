@@ -2,6 +2,8 @@ import json
 import re
 from dataclasses import dataclass
 from operator import itemgetter
+import subprocess
+import tempfile
 from typing import Any, Optional
 
 import yaml
@@ -434,6 +436,30 @@ def _join_manifests(xs: list[dict | str]) -> str:
         raise ValueError(f"argument must be list[dit|str]: {xs}")
 
 
+@chain_decorator
+def dryrun_str(manifests: str) -> Judgement:
+    """execute kubectl apply --dry-run=server"""
+
+    # generate tmpfile
+    with tempfile.NamedTemporaryFile(
+        "w", prefix="dryrun", suffix=".yaml", delete=False
+    ) as f:
+        f.write(manifests)
+        f.close()
+        # get stdout and stderr separately using pipe
+        with subprocess.Popen(
+            f"kubectl apply -f {f.name} --dry-run=server",
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            encoding="utf-8",
+        ) as proc:
+            stdout, stderr = proc.communicate()
+            return Judgement(
+                ok=proc.returncode == 0, metadata=dict(stdout=stdout, stderr=stderr)
+            )
+
+
 # 複数の評価 (Correctness, groundness) をするチェーン
 # receive {compose, judge, output_parsed}
 chains_grade = RunnablePassthrough.assign(
@@ -443,6 +469,7 @@ chains_grade = RunnablePassthrough.assign(
             {"compose": dic["compose"], "manifest": m} for m in dic["output_parsed"]
         ]
     ).assign(model_graded=itemgetter("_in_out_pairs") | chain_grader.map()),
+    grade_by_dryrun=itemgetter("output_parsed") | dryrun_str.map(),
 )
 
 # さまざまなメソッドからなるチェーン
