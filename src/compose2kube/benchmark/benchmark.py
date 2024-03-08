@@ -504,28 +504,28 @@ chains_convert_grade = RunnableParallel(
     | chains_grade,
     #
     # Method3: annotate -> kompose
-    annotate_kompose=RunnablePassthrough.assign(
-        output_with_metadata=itemgetter("compose")
-        | to_doc
-        | CONVERT_METHODS["annotate_kompose"],
-    )
-    .assign(
-        output_parsed=itemgetter("output_with_metadata")
-        | RunnableLambda(lambda doc: doc.page_content).map()
-    )
-    .pick(["compose", "judge", "output_with_metadata", "output_parsed"])
-    | chains_grade,
-    #
-    # Method4: 正規化してからmethod3
-    canonicalize_annotate_kompose=RunnablePassthrough.assign(
-        output_with_metadata=itemgetter("compose")
-        | to_doc
-        | CONVERT_METHODS["canonical_annotate_kompose"],
-    )
-    .assign(
-        output_parsed=itemgetter("output_with_metadata")
-        | RunnableLambda(lambda doc: doc.page_content).map()
-    )
-    .pick(["compose", "judge", "output_with_metadata", "output_parsed"])
-    | chains_grade,
+    # annotate_kompose=RunnablePassthrough.assign(
+    #     output_with_metadata=itemgetter("compose")
+    #     | to_doc
+    #     | CONVERT_METHODS["annotate_kompose"],
+    # )
+    # .assign(
+    #     output_parsed=itemgetter("output_with_metadata")
+    #     | RunnableLambda(lambda doc: doc.page_content).map()
+    # )
+    # .pick(["compose", "judge", "output_with_metadata", "output_parsed"])
+    # | chains_grade,
+    # #
+    # # Method4: 正規化してからmethod3
+    # canonicalize_annotate_kompose=RunnablePassthrough.assign(
+    #     output_with_metadata=itemgetter("compose")
+    #     | to_doc
+    #     | CONVERT_METHODS["canonical_annotate_kompose"],
+    # )
+    # .assign(
+    #     output_parsed=itemgetter("output_with_metadata")
+    #     | RunnableLambda(lambda doc: doc.page_content).map()
+    # )
+    # .pick(["compose", "judge", "output_with_metadata", "output_parsed"])
+    # | chains_grade,
 )
