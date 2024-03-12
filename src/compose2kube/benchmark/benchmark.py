@@ -555,4 +555,16 @@ chains_convert_grade = RunnableParallel(
     # )
     # .pick(["compose", "judge", "output_with_metadata", "output_parsed"])
     # | chains_grade,
+    #
+    # Method5: expert prompting
+    #
+    expertprompting_text=RunnablePassthrough.assign(
+        output_parsed=itemgetter("compose")
+        | to_doc
+        | CONVERT_METHODS["expertprompting_text"]  # receives Document
+        | RunnableLambda(
+            lambda d: d.page_content  # TODO: Make chains_grade accepts Document
+        ).map()
+    ).pick(["compose", "judge", "output", "output_parsed"])
+    | chains_grade,
 )
