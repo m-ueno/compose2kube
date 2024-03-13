@@ -243,18 +243,20 @@ def judge3(manifests_str: str) -> Judgement:
     try:
         manifests = yaml.safe_load_all(manifests_str)
         for manifest in manifests:
+            if manifest is None:
+                continue
             if manifest.get("kind") == "Service":
                 continue
             if manifest.get("metadata", {}).get("name") == "db":
                 controller_kind = manifest.get("kind")
                 ok = controller_kind == "StatefulSet"
                 return Judgement(ok=ok, metadata=dict(kind=controller_kind))
-    except yaml.YAMLError as exc:
+    except Exception as exc:
         print(f"Error parsing YAML: {exc}")
         return Judgement(ok=False, metadata={"error": str(exc)})
 
     return Judgement(
-        ok=False, metadata={"error": "No 'db' manifest found or other error"}
+        ok=False, metadata={"reason": "No 'db' manifest found or other error"}
     )
 
 
@@ -269,6 +271,8 @@ def judge4(manifests: str) -> Judgement:
     try:
         documents = yaml.safe_load_all(manifests)
         for doc in documents:
+            if doc is None:
+                continue
             match doc.get("kind", ""):
                 case "Deployment" | "StatefulSet":
                     containers = (
@@ -334,6 +338,8 @@ def judge12(manifests: str) -> Judgement:
     try:
         documents = yaml.safe_load_all(manifests)
         for doc in documents:
+            if doc is None:
+                continue
             match doc.get("kind"):
                 case "Deployment" | "StatefulSet":
                     containers = (
