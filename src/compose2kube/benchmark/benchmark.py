@@ -1,9 +1,9 @@
 import json
 import re
-from dataclasses import dataclass
-from operator import itemgetter
 import subprocess
 import tempfile
+from dataclasses import dataclass
+from operator import itemgetter
 from typing import Any, Optional
 
 import yaml
@@ -24,8 +24,8 @@ from langchain_core.runnables import (
 from langchain_core.runnables import chain as chain_decorator
 
 from compose2kube.benchmark.grader import chain_grader, prompt_grader
-from compose2kube.benchmark.parser import MDCodeBlockOutputParser
 from compose2kube.benchmark.methods import CONVERT_METHODS, to_doc
+from compose2kube.benchmark.parser import MDCodeBlockOutputParser
 from compose2kube.evaluator import Manifests
 from compose2kube.model import ChatOpenAIMultiGenerations
 
@@ -243,18 +243,20 @@ def judge3(manifests_str: str) -> Judgement:
     try:
         manifests = yaml.safe_load_all(manifests_str)
         for manifest in manifests:
+            if manifest is None:
+                continue
             if manifest.get("kind") == "Service":
                 continue
             if manifest.get("metadata", {}).get("name") == "db":
                 controller_kind = manifest.get("kind")
                 ok = controller_kind == "StatefulSet"
                 return Judgement(ok=ok, metadata=dict(kind=controller_kind))
-    except yaml.YAMLError as exc:
+    except Exception as exc:
         print(f"Error parsing YAML: {exc}")
         return Judgement(ok=False, metadata={"error": str(exc)})
 
     return Judgement(
-        ok=False, metadata={"error": "No 'db' manifest found or other error"}
+        ok=False, metadata={"reason": "No 'db' manifest found or other error"}
     )
 
 
@@ -269,6 +271,8 @@ def judge4(manifests: str) -> Judgement:
     try:
         documents = yaml.safe_load_all(manifests)
         for doc in documents:
+            if doc is None:
+                continue
             match doc.get("kind", ""):
                 case "Deployment" | "StatefulSet":
                     containers = (
@@ -334,6 +338,8 @@ def judge12(manifests: str) -> Judgement:
     try:
         documents = yaml.safe_load_all(manifests)
         for doc in documents:
+            if doc is None:
+                continue
             match doc.get("kind"):
                 case "Deployment" | "StatefulSet":
                     containers = (
@@ -367,7 +373,6 @@ def judge12(manifests: str) -> Judgement:
 
 def judge9(manifests: str) -> Judgement:
     # pyyamlでパースするとコメントが消えてしまうので文字列処理
-    import re
 
     required_comments = list(
         map(
@@ -555,4 +560,16 @@ chains_convert_grade = RunnableParallel(
     # )
     # .pick(["compose", "judge", "output_with_metadata", "output_parsed"])
     # | chains_grade,
+    #
+    # Method5: expert prompting
+    #
+    expertprompting_text=RunnablePassthrough.assign(
+        output_parsed=itemgetter("compose")
+        | to_doc
+        | CONVERT_METHODS["expertprompting_text"]  # receives Document
+        | RunnableLambda(
+            lambda d: d.page_content  # TODO: Make chains_grade accepts Document
+        ).map()
+    ).pick(["compose", "judge", "output", "output_parsed"])
+    | chains_grade,
 )
