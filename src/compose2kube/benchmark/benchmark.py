@@ -1,9 +1,9 @@
 import json
 import re
-from dataclasses import dataclass
-from operator import itemgetter
 import subprocess
 import tempfile
+from dataclasses import dataclass
+from operator import itemgetter
 from typing import Any, Optional
 
 import yaml
@@ -24,8 +24,8 @@ from langchain_core.runnables import (
 from langchain_core.runnables import chain as chain_decorator
 
 from compose2kube.benchmark.grader import chain_grader, prompt_grader
-from compose2kube.benchmark.parser import MDCodeBlockOutputParser
 from compose2kube.benchmark.methods import CONVERT_METHODS, to_doc
+from compose2kube.benchmark.parser import MDCodeBlockOutputParser
 from compose2kube.evaluator import Manifests
 from compose2kube.model import ChatOpenAIMultiGenerations
 
@@ -373,7 +373,6 @@ def judge12(manifests: str) -> Judgement:
 
 def judge9(manifests: str) -> Judgement:
     # pyyamlでパースするとコメントが消えてしまうので文字列処理
-    import re
 
     required_comments = list(
         map(
