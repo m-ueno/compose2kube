@@ -1,7 +1,7 @@
 import subprocess
 import tempfile
 from langchain_core.runnables import chain as chain_decorator
-from compose2kube.benchmark.benchmark import Judgement
+from compose2kube.benchmark.grader import Judgement
 
 
 @chain_decorator

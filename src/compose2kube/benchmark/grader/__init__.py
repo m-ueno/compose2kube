@@ -1,9 +1,21 @@
+import json
+from dataclasses import dataclass
 from operator import itemgetter
-import yaml
+from typing import Any
+
 from langchain_core.runnables import RunnablePassthrough
 
 from .dryrun import dryrun_str
 from .llm import chain_grader
+
+
+@dataclass
+class Judgement:
+    ok: bool
+    metadata: dict[str, Any]
+
+    def to_json(self, *args, **kwargs):
+        return json.dumps(self.__dict__)
 
 
 # 複数の評価 (Correctness, groundness) をするチェーン
