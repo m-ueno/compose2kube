@@ -23,7 +23,7 @@ from langchain_core.runnables import (
 )
 from langchain_core.runnables import chain as chain_decorator
 
-from compose2kube.benchmark.grader import chain_grader, prompt_grader
+from compose2kube.benchmark.grader import chains_grade
 from compose2kube.benchmark.methods import CONVERT_METHODS, to_doc
 from compose2kube.benchmark.parser import MDCodeBlockOutputParser
 from compose2kube.evaluator import Manifests
@@ -429,18 +429,6 @@ def _join_manifests(xs: list[dict | str]) -> str:
     else:
         raise ValueError(f"argument must be list[dit|str]: {xs}")
 
-
-# 複数の評価 (Correctness, groundness) をするチェーン
-# receive {compose, judge, output_parsed}
-chains_grade = RunnablePassthrough.assign(
-    grade_by_function=lambda dic: list(map(dic["judge"], dic["output_parsed"])),  # type: ignore
-    grade_by_model=RunnablePassthrough.assign(
-        _in_out_pairs=lambda dic: [
-            {"compose": dic["compose"], "manifest": m} for m in dic["output_parsed"]
-        ]
-    ).assign(model_graded=itemgetter("_in_out_pairs") | chain_grader.map()),
-    grade_by_dryrun=itemgetter("output_parsed") | dryrun_str.map(),
-)
 
 # さまざまなメソッドからなるチェーン
 # receive {compose, judge}
