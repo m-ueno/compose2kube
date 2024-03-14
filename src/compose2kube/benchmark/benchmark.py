@@ -419,11 +419,6 @@ def tap_print(x):
     return x
 
 
-@chain_decorator
-def identity(x):
-    return x
-
-
 def _join_manifests(xs: list[dict | str]) -> str:
     # compose.llm.Manifests.manifests: list[str|dict] にした結果のその場しのぎの関数
     child = xs[0]
