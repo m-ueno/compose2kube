@@ -408,11 +408,10 @@ INPUTS_JUDGES = [
 ]
 
 
-def wrap(fn):
-    @chain_decorator
-    def wrapped_fn(arg):
+def catch_decorator(fn):
+    def wrapped_fn(*args):
         try:
-            return fn(arg)
+            return fn(*args)
         except Exception as e:
             return Judgement(ok=False, metadata={"error": str(e)})
 
