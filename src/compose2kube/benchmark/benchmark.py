@@ -239,6 +239,16 @@ class Judgement:
         return json.dumps(self.__dict__)
 
 
+def catch_decorator(fn):
+    def wrapped_fn(*args):
+        try:
+            return fn(*args)
+        except Exception as e:
+            return Judgement(ok=False, metadata={"error": str(e)})
+
+    return wrapped_fn
+
+
 def judge3(manifests_str: str) -> Judgement:
     try:
         manifests = yaml.safe_load_all(manifests_str)
@@ -406,16 +416,6 @@ INPUTS_JUDGES = [
     ("input9", input9, judge9),
     ("input12", input12, judge12),
 ]
-
-
-def catch_decorator(fn):
-    def wrapped_fn(*args):
-        try:
-            return fn(*args)
-        except Exception as e:
-            return Judgement(ok=False, metadata={"error": str(e)})
-
-    return wrapped_fn
 
 
 @chain_decorator
