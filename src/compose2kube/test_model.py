@@ -38,5 +38,4 @@ class TestChatOpenAI(unittest.TestCase):
             model="gpt-3.5-turbo", n=3, temperature=1, api_key="dummy"
         )
         got = chat.invoke("こんにちは！")
-        print(got)
         self.assertEqual(len(got), 3)
