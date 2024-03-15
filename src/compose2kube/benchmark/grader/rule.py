@@ -1,6 +1,8 @@
 import re
-from compose2kube.benchmark.grader import Judgement
+
 import yaml
+
+from .judgement import Judgement
 
 input3 = """
 services:
