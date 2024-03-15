@@ -1,12 +1,10 @@
 from operator import itemgetter
 
 import yaml
-from langchain.cache import SQLiteCache
 from langchain.chains.openai_functions import (
     convert_to_openai_function,
     get_openai_output_parser,
 )
-from langchain.globals import set_llm_cache
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import (
@@ -23,7 +21,6 @@ from compose2kube.benchmark.parser import MDCodeBlockOutputParser
 from compose2kube.evaluator import Manifests
 from compose2kube.model import ChatOpenAIMultiGenerations
 
-set_llm_cache(SQLiteCache())
 
 
 @chain_decorator
