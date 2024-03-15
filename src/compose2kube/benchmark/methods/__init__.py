@@ -11,7 +11,7 @@ from langchain_core.runnables import (
     ConfigurableField,
     RunnableLambda,  # noqa: F401
     RunnableParallel,
-    RunnablePassthrough,
+    RunnablePassthrough,  # noqa: F401
     RunnableSerializable,
 )
 from langchain_core.runnables import (
