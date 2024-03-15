@@ -13,20 +13,12 @@ from langchain_core.runnables import (
     RunnableParallel,
     RunnablePassthrough,
 )
-from langchain_core.runnables import chain as chain_decorator
 
 from compose2kube.benchmark.grader import chains_grade
 from compose2kube.benchmark.methods import CONVERT_METHODS, to_doc
 from compose2kube.benchmark.parser import MDCodeBlockOutputParser
 from compose2kube.evaluator import Manifests
 from compose2kube.model import ChatOpenAIMultiGenerations
-
-
-
-@chain_decorator
-def tap_print(x):
-    print("tap:", x)
-    return x
 
 
 def _join_manifests(xs: list[dict | str]) -> str:
