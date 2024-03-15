@@ -15,6 +15,7 @@ from langchain_core.runnables import (
 )
 
 from compose2kube.benchmark.grader import chains_grade
+from compose2kube.benchmark.grader.rule import INPUTS_JUDGES
 from compose2kube.benchmark.methods import CONVERT_METHODS, to_doc
 from compose2kube.benchmark.parser import MDCodeBlockOutputParser
 from compose2kube.evaluator import Manifests
