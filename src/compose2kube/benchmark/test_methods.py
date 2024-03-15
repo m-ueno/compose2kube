@@ -1,8 +1,5 @@
 import unittest
 from subprocess import check_output
-from dotenv import find_dotenv, load_dotenv
-
-load_dotenv(find_dotenv())
 
 from compose2kube.benchmark.methods import Document, canonicalize, kompose  # noqa: E402
 
