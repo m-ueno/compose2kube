@@ -1,0 +1,102 @@
+Converting a Docker Compose file to Kubernetes manifests involves creating multiple Kubernetes objects such as Deployments, Services, PersistentVolumeClaims, etc. Here's an example conversion of the provided Docker Compose file to Kubernetes manifests:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec-deployment
+spec:
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+      - name: act-sdk-exec
+        image: ${REGISTRY}/${REPOSITORY}/${MAIN_EXEC_IMAGE}
+        tty: true
+        ports:
+        - containerPort: 8002 # serverアプリとの通信
+        - containerPort: 5003 # Websocketとの通信
+        env:
+        - name: PYTHONPATH
+          value: "/workspace/app-base/src:/workspace"
+        volumeMounts:
+        - name: workspace-app
+          mountPath: /workspace/app
+        - name: log
+          mountPath: /workspace/app/exec/log
+        - name: src
+          mountPath: /workspace/app/src
+        - name: configs
+          mountPath: /workspace/app/exec/configs
+        - name: websocket-sv
+          mountPath: /workspace/app-base/src/app_base/parts/websocket_sv
+        securityContext:
+          capabilities:
+            add:
+            - SYS_ADMIN
+          seLinuxOptions:
+            type: spc_t
+        command: ["/bin/sh", "-c"]
+        args: ["cd /workspace/app/src && python3 SampleApp.py"]
+      volumes:
+      - name: workspace-app
+        persistentVolumeClaim:
+          claimName: workspace-app-pvc
+      - name: log
+        hostPath:
+          path: /path/on/host/log
+      - name: src
+        hostPath:
+          path: /path/on/host/app_container/src
+      - name: configs
+        hostPath:
+          path: /path/on/host/app_container/configs
+      - name: websocket-sv
+        hostPath:
+          path: /path/on/host/add_components/websocket_sv
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-service
+spec:
+  selector:
+    app: act-sdk-exec
+  ports:
+  - name: gui-port
+    port: ${GUI_FWD_PORT}
+    targetPort: 8002
+  - name: wss-port
+    port: ${WSS_FWD_PORT}
+    targetPort: 5003
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-app-pvc
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+```
+
+Remember to replace `${REGISTRY}`, `${REPOSITORY}`, `${MAIN_EXEC_IMAGE}`, `${GUI_FWD_PORT}`, and `${WSS_FWD_PORT}` with their actual values as they are environment variable placeholders in the original Docker Compose file.
+
+The `depends_on` directive has no direct translation in Kubernetes, as Kubernetes will not guarantee the start order of pods.
+
+The `volumes` section has been translated to PersistentVolumeClaims and hostPath volumes. You will need to adjust the host paths and PVC configurations to match your actual environment and storage requirements.
+
+The `security_opt` directive does not have a direct equivalent in Kubernetes, but you can achieve similar effects using `securityContext`. Here, I've shown how to add capabilities and use SELinux options, but please tailor this to your actual security requirements.
+
+Kubernetes does not directly support `SYS_ADMIN` capability due to security reasons, and you may need to reconsider if you really need it, or adjust your security policies.
+
+Lastly, you would need to create the Kubernetes resources using `kubectl apply` with these manifest files.

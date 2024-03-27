@@ -1,0 +1,102 @@
+To convert the provided Docker Compose file snippet to Kubernetes manifests, we'll create a deployment and a service for the `act-sdk_exec` service, along with a Persistent Volume Claim (PVC) for the `workspace_app` volume. Since the Docker Compose file contains environment variables, we'll assume these variables are already defined for the Kubernetes manifests or replace them with actual values. Here's how you can convert the provided snippet:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+      - name: act-sdk-exec
+        image: ${REGISTRY}/${REPOSITORY}/${MAIN_EXEC_IMAGE}
+        tty: true
+        ports:
+        - containerPort: 8002
+        - containerPort: 5003
+        env:
+        - name: PYTHONPATH
+          value: "/workspace/app-base/src:/workspace"
+        volumeMounts:
+        - name: workspace-app
+          mountPath: /workspace/app
+        - name: log
+          mountPath: /workspace/app/exec/log
+        - name: src
+          mountPath: /workspace/app/src
+        - name: configs
+          mountPath: /workspace/app/exec/configs
+        - name: websocket-sv
+          mountPath: /workspace/app-base/src/app_base/parts/websocket_sv
+        securityContext:
+          capabilities:
+            add: ["SYS_ADMIN"]
+          seccompProfile:
+            type: Unconfined
+        command: ["/bin/sh", "-c"]
+        args: ["cd /workspace/app/src && python3 SampleApp.py"]
+      volumes:
+      - name: workspace-app
+        persistentVolumeClaim:
+          claimName: workspace-app-pvc
+      - name: log
+        hostPath:
+          path: /path/on/host/log
+      - name: src
+        hostPath:
+          path: /path/on/host/app_container/src
+      - name: configs
+        hostPath:
+          path: /path/on/host/app_container/configs
+      - name: websocket-sv
+        hostPath:
+          path: /path/on/host/add_components/websocket_sv
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-service
+spec:
+  type: NodePort
+  ports:
+  - name: gui
+    port: 8002
+    targetPort: 8002
+    nodePort: ${GUI_FWD_PORT}
+  - name: wss
+    port: 5003
+    targetPort: 5003
+    nodePort: ${WSS_FWD_PORT}
+  selector:
+    app: act-sdk-exec
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-app-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi # Specify the size of the PVC
+```
+
+Please note the following:
+
+- You need to replace the `${REGISTRY}`, `${REPOSITORY}`, and `${MAIN_EXEC_IMAGE}` placeholders with their actual values or ensure they are defined as environment variables in your Kubernetes environment.
+- The `ports` section in the Service manifest uses `NodePort` to expose the service. The exact type you need (e.g., `ClusterIP`, `NodePort`, `LoadBalancer`) will depend on your specific use case.
+- The hostPath volumes are used to mount directories from the host into the container. You'll need to replace `/path/on/host/` with the actual paths on your Kubernetes nodes where the data resides.
+- The PersistentVolumeClaim (PVC) `workspace-app-pvc` is defined, but you'll need to create an actual PersistentVolume (PV) to satisfy this claim or have a dynamic provisioner that will automatically provision the storage.
+- `depends_on` in Docker Compose is not directly translatable to Kubernetes, as Kubernetes will start all the pods as soon as it can, and you have to handle inter-dependencies within your application.
+- Capabilities and security options are set via the `securityContext`, but some options like `SYS_ADMIN` can be restricted in certain Kubernetes environments for security reasons.
+
+Remember, this is a starting point, and you may need to adjust the manifests to fit the specifics of your environment and requirements.

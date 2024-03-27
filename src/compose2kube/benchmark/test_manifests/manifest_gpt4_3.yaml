@@ -1,0 +1,118 @@
+To convert the given Compose file to Kubernetes manifests, we would create a Deployment, a Service, and a PersistentVolumeClaim (PVC) for the volumes if needed. Below are the Kubernetes manifests that correspond to the provided Docker Compose file:
+
+1. PersistentVolumeClaim for `workspace_app`:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-app-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi # You should specify the required size
+```
+
+2. Deployment for `act-sdk_exec`:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+        - name: act-sdk-exec
+          image: "${REGISTRY}/${REPOSITORY}/${MAIN_EXEC_IMAGE}"
+          tty: true
+          securityContext:
+            capabilities:
+              add:
+                - SYS_ADMIN
+            seccompProfile:
+              type: Unconfined
+          ports:
+            - containerPort: 8002 # GUI port
+            - containerPort: 5003 # Websocket port
+          env:
+            - name: PYTHONPATH
+              value: "/workspace/app-base/src:/workspace"
+          volumeMounts:
+            - name: workspace-app
+              mountPath: /workspace/app
+            # Mount your other volumes as needed
+            - name: log-volume
+              mountPath: /workspace/app/exec/log
+            - name: src-volume
+              mountPath: /workspace/app/src
+            - name: configs-volume
+              mountPath: /workspace/app/exec/configs
+            - name: websocket-sv-volume
+              mountPath: /workspace/app-base/src/app_base/parts/websocket_sv
+          workingDir: /workspace/app/src
+          command:
+            - "/bin/sh"
+            - "-c"
+            - "python3 SampleApp.py"
+      volumes:
+        - name: workspace-app
+          persistentVolumeClaim:
+            claimName: workspace-app-pvc
+        # Define other volumes here, for example using ConfigMap, Secret, or hostPath
+        - name: log-volume
+          hostPath:
+            path: /path/on/host/log # Update this path
+        - name: src-volume
+          hostPath:
+            path: /path/on/host/app_container/src # Update this path
+        - name: configs-volume
+          hostPath:
+            path: /path/on/host/app_container/configs # Update this path
+        - name: websocket-sv-volume
+          hostPath:
+            path: /path/on/host/add_components/websocket_sv # Update this path
+```
+
+3. Service for `act-sdk_exec`:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-service
+spec:
+  selector:
+    app: act-sdk-exec
+  ports:
+    - name: gui
+      port: ${GUI_FWD_PORT}
+      targetPort: 8002
+    - name: wss
+      port: ${WSS_FWD_PORT}
+      targetPort: 5003
+  type: ClusterIP # Change to NodePort or LoadBalancer if external access is required
+```
+
+Please note the following:
+
+- Replace `${REGISTRY}`, `${REPOSITORY}`, and `${MAIN_EXEC_IMAGE}` with the actual values.
+- Update storage size for `workspace-app-pvc` according to your needs.
+- The `depends_on` directive from Docker Compose does not have a direct equivalent in Kubernetes. Dependencies are typically managed by readiness and liveness probes.
+- The `ports` in the service definition should have the actual values replaced for `${GUI_FWD_PORT}` and `${WSS_FWD_PORT}`.
+- The `environment` variables are set using the `env` field in the container spec.
+- The `volumes` in Docker Compose are converted to `volumeMounts` in the container spec and `volumes` at the pod level. The PVC `workspace-app` is created and mounted. The other volume mounts are placeholders using `hostPath` for illustration, but you may need to adjust them according to your cluster's storage provisioner or use ConfigMaps/Secrets if applicable.
+- The `cap_add` and `security_opt` are set using `securityContext` in the container spec.
+- The `entrypoint` is converted to `command` and `args` in the container spec.
+
+Make sure to tailor the manifests according to your specific Kubernetes cluster setup, storage provisioning, and networking requirements.

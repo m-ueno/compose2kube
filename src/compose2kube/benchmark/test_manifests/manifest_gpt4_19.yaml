@@ -1,0 +1,100 @@
+To convert the provided Docker Compose file into Kubernetes manifests, you can create several Kubernetes resources such as Deployment, Service, PersistentVolumeClaim, and ConfigMap. Below is an example of how these might be translated. Note that the environment variables such as `${REGISTRY}`, `${REPOSITORY}`, `${MAIN_EXEC_IMAGE}`, `${GUI_FWD_PORT}`, and `${WSS_FWD_PORT}` should be replaced with actual values or handled through ConfigMaps/Secrets.
+
+First, let's create a PersistentVolumeClaim for the workspace storage:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-app-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+---
+```
+
+Next, let's create a ConfigMap for holding the configuration files:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: act-sdk-exec-config
+data:
+  # Add your configurations here in key-value format
+---
+```
+
+Now, let's create the Deployment that will define the `act-sdk_exec` service:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec-deployment
+spec:
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+      - name: act-sdk-exec-container
+        image: <REGISTRY>/<REPOSITORY>/<MAIN_EXEC_IMAGE> # Replace with actual values
+        tty: true
+        securityContext:
+          capabilities:
+            add:
+            - SYS_ADMIN
+          seLinuxOptions: {} # You might need to adjust this depending on your security requirements
+        ports:
+        - containerPort: 8002 # Replace with actual GUI_FWD_PORT value
+        - containerPort: 5003 # Replace with actual WSS_FWD_PORT value
+        env:
+        - name: PYTHONPATH
+          value: "/workspace/app-base/src:/workspace"
+        volumeMounts:
+        - name: workspace-app-volume
+          mountPath: /workspace/app
+        # Mount other volumes as needed
+        command: ["/bin/sh", "-c"]
+        args: ["cd /workspace/app/src && python3 SampleApp.py"]
+      volumes:
+      - name: workspace-app-volume
+        persistentVolumeClaim:
+          claimName: workspace-app-pvc
+      # Define other volumes here
+  restartPolicy: Always
+---
+```
+
+Finally, let's define a Service to expose the ports:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-service
+spec:
+  selector:
+    app: act-sdk-exec
+  ports:
+  - name: gui
+    port: 8002 # Replace with actual GUI_FWD_PORT value
+    targetPort: 8002
+  - name: wss
+    port: 5003 # Replace with actual WSS_FWD_PORT value
+    targetPort: 5003
+  type: ClusterIP
+---
+```
+
+Remember to create the necessary ConfigMaps and Secrets to handle your configuration files and environment variables. Also, you will need to adjust the PersistentVolumeClaim and the volume mounts to match your specific storage requirements.
+
+This is a simplified example and might need further customization based on your specific needs, such as setting up the correct security context, handling environment variables, and adjusting resource requests and limits for the containers.

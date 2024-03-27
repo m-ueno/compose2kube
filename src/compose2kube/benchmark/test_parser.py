@@ -1,5 +1,9 @@
-import yaml
+import glob
+import os
+from pathlib import Path
 import unittest
+
+import yaml
 
 from compose2kube.benchmark.parser import MDCodeBlockOutputParser
 
@@ -88,3 +92,19 @@ a: 1
 """
         self.assertEqual(got, want)
         self.assertDictEqual(yaml.safe_load(got), yaml.safe_load(want))
+
+    def test_can_parse_generated_text_without_exception(self):
+        count = 0
+        yaml_parse_failed = 0
+        here = Path(os.path.dirname(__file__))
+        for name in glob.glob(f"{here}/test_manifests/*.yaml"):
+            with open(name) as f:
+                yamls = parser.parse(f.read())
+                count += 1
+            try:
+                _ = list(yaml.safe_load_all(yamls))
+            except Exception:
+                yaml_parse_failed += 1
+
+        self.assertEqual(count, 100)
+        self.assertLessEqual(yaml_parse_failed, 2)

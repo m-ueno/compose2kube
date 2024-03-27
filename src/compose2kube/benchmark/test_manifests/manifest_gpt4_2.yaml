@@ -1,0 +1,108 @@
+To convert the given `docker-compose` file snippet into Kubernetes manifests, you need to create a Deployment or a Pod specification along with any necessary ConfigMaps, Secrets, PersistentVolumeClaims, and Services. Below is an example of how you might convert the provided compose file into Kubernetes manifests.
+
+Please replace the environment variables and other placeholders with actual values as needed.
+
+**Deployment.yaml**:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+      - name: act-sdk-exec-container
+        image: ${REGISTRY}/${REPOSITORY}/${MAIN_EXEC_IMAGE}
+        tty: true
+        ports:
+        - containerPort: 8002 # Replace with the actual value of GUI_FWD_PORT
+        - containerPort: 5003 # Replace with the actual value of WSS_FWD_PORT
+        env:
+        - name: PYTHONPATH
+          value: "/workspace/app-base/src:/workspace"
+        volumeMounts:
+        - name: workspace-app
+          mountPath: /workspace/app
+        - name: log
+          mountPath: /workspace/app/exec/log
+        - name: src
+          mountPath: /workspace/app/src
+        - name: configs
+          mountPath: /workspace/app/exec/configs
+        - name: websocket-sv
+          mountPath: /workspace/app-base/src/app_base/parts/websocket_sv
+        securityContext:
+          capabilities:
+            add: ["SYS_ADMIN"]
+          seLinuxOptions:  # If you need to define SELinux options
+            # Add your SELinux options here
+          # Uncomment this if you need to run with seccomp:unconfined
+          # seccompProfile:
+          #   type: Unconfined
+        command: ["/bin/sh", "-c"]
+        args: ["cd /workspace/app/src && python3 SampleApp.py"]
+      volumes:
+      - name: workspace-app
+        persistentVolumeClaim:
+          claimName: workspace-app-pvc
+      - name: log
+        hostPath:
+          path: /path/to/log # Replace with the actual host path
+      - name: src
+        hostPath:
+          path: /path/to/src # Replace with the actual host path
+      - name: configs
+        hostPath:
+          path: /path/to/configs # Replace with the actual host path
+      - name: websocket-sv
+        hostPath:
+          path: /path/to/websocket_sv # Replace with the actual host path
+```
+
+**PersistentVolumeClaim.yaml**:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-app-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi # Specify the size of the volume
+```
+
+**Service.yaml** (if you need to expose the ports):
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-service
+spec:
+  selector:
+    app: act-sdk-exec
+  ports:
+  - name: gui-port
+    port: 8002 # Replace with the actual value of GUI_FWD_PORT
+    targetPort: 8002
+  - name: wss-port
+    port: 5003 # Replace with the actual value of WSS_FWD_PORT
+    targetPort: 5003
+  type: ClusterIP # or NodePort, LoadBalancer as per requirement
+```
+
+You will need to create actual PersistentVolumes for the hostPath volumes or switch to using PersistentVolumeClaims as shown for the `workspace-app` volume.
+
+Please note that this conversion assumes that you will replace the placeholders with actual values and make the necessary adjustments as per your environment and requirements. The security context and capabilities should be set carefully to adhere to your cluster's security policies.

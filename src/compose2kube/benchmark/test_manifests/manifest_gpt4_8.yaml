@@ -1,0 +1,109 @@
+Converting a Docker Compose file to Kubernetes manifests involves creating resources such as Deployments, Services, PersistentVolumeClaims, and ConfigMaps among others. Below is a Kubernetes equivalent for your Compose file.
+
+Please note that the conversion is not always one-to-one as Kubernetes offers more configuration options and is more complex than Docker Compose.
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-app-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi # You need to specify the storage size
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+        - name: act-sdk-exec
+          image: "${REGISTRY}/${REPOSITORY}/${MAIN_EXEC_IMAGE}"
+          tty: true
+          ports:
+            - containerPort: 8002 # Map GUI_FWD_PORT to 8002
+            - containerPort: 5003 # Map WSS_FWD_PORT to 5003
+          env:
+            - name: PYTHONPATH
+              value: "/workspace/app-base/src:/workspace"
+          volumeMounts:
+            - name: workspace-app
+              mountPath: /workspace/app
+            - name: log-volume
+              mountPath: /workspace/app/exec/log
+            - name: src-volume
+              mountPath: /workspace/app/src
+            - name: configs-volume
+              mountPath: /workspace/app/exec/configs
+            - name: websocket-sv-volume
+              mountPath: /workspace/app-base/src/app_base/parts/websocket_sv
+          securityContext:
+            capabilities:
+              add: ["SYS_ADMIN"]
+            seLinuxOptions: {}
+          command: ["/bin/sh", "-c"]
+          args: ["cd /workspace/app/src && python3 SampleApp.py"]
+      volumes:
+        - name: workspace-app
+          persistentVolumeClaim:
+            claimName: workspace-app-pvc
+        - name: log-volume
+          hostPath:
+            path: ./log
+        - name: src-volume
+          hostPath:
+            path: ./app_container/src
+        - name: configs-volume
+          hostPath:
+            path: ./app_container/configs
+        - name: websocket-sv-volume
+          hostPath:
+            path: ./add_components/websocket_sv
+      securityContext:
+        runAsNonRoot: true
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-service
+spec:
+  selector:
+    app: act-sdk-exec
+  ports:
+    - name: gui
+      protocol: TCP
+      port: 8002
+      targetPort: 8002
+    - name: websocket
+      protocol: TCP
+      port: 5003
+      targetPort: 5003
+  type: ClusterIP
+```
+
+There are a few points to note:
+
+1. The `image` field in the Kubernetes manifest should be replaced with the actual image you want to use. The placeholders `${REGISTRY}`, `${REPOSITORY}`, and `${MAIN_EXEC_IMAGE}` should be replaced with actual values.
+2. The `ports` in the `Deployment` are container ports, and the environment variable mappings for `GUI_FWD_PORT` and `WSS_FWD_PORT` should be done outside of this manifest or directly replaced with the actual port numbers.
+3. The `volumes` field in the `Deployment` is mapped to `PersistentVolumeClaims` for shared storage and `hostPath` for local directories. Adjust the `hostPath` if necessary.
+4. The `tty: true` and `restart: always` options in Docker Compose do not have an equivalent in Kubernetes, as Kubernetes always attempts to restart failed containers by default.
+5. Capabilities and security options have been set in the `securityContext`, but may need to be adjusted based on your cluster's security policies and requirements.
+6. Since `depends_on` is not directly supported in Kubernetes, you should manage dependencies through other Kubernetes mechanisms, such as InitContainers or ordering of deployment.
+
+Remember to replace the variables and adjust the volume storage sizes to fit your actual application requirements. You may also need to set up proper RBAC rules and other Kubernetes-specific configurations based on your cluster setup.

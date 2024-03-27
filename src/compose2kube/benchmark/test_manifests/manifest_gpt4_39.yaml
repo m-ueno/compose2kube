@@ -1,0 +1,115 @@
+Converting a Docker Compose file to Kubernetes manifests involves several steps. For each service defined in the Docker Compose file, we need to create a corresponding Kubernetes deployment and service. Additionally, since you have defined volumes in your Compose file, we will need to provision persistent volumes and persistent volume claims for stateful data.
+
+Here is a basic conversion of your Docker Compose file to Kubernetes manifests:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-app-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+      - name: act-sdk-exec-container
+        image: ${REGISTRY}/${REPOSITORY}/${MAIN_EXEC_IMAGE}
+        tty: true
+        ports:
+        - containerPort: 8002
+          name: gui-port
+        - containerPort: 5003
+          name: wss-port
+        env:
+        - name: PYTHONPATH
+          value: "/workspace/app-base/src:/workspace"
+        volumeMounts:
+        - name: workspace-app
+          mountPath: /workspace/app
+        - name: log-volume
+          mountPath: /workspace/app/exec/log
+        - name: src-volume
+          mountPath: /workspace/app/src
+        - name: config-volume
+          mountPath: /workspace/app/exec/configs
+        - name: websocket-sv-volume
+          mountPath: /workspace/app-base/src/app_base/parts/websocket_sv
+        securityContext:
+          capabilities:
+            add: ["SYS_ADMIN"]
+          seccompProfile:
+            type: Unconfined
+        command:
+        - /bin/sh
+        - -c
+        - cd /workspace/app/src && python3 SampleApp.py
+      volumes:
+      - name: workspace-app
+        persistentVolumeClaim:
+          claimName: workspace-app-pvc
+      # Note: For hostPath or local volumes, you need to configure the below volumes accordingly.
+      - name: log-volume
+        hostPath:
+          path: /path/on/host/log  # Replace with actual path on host
+      - name: src-volume
+        hostPath:
+          path: /path/on/host/app_container/src  # Replace with actual path on host
+      - name: config-volume
+        hostPath:
+          path: /path/on/host/app_container/configs  # Replace with actual path on host
+      - name: websocket-sv-volume
+        hostPath:
+          path: /path/on/host/add_components/websocket_sv  # Replace with actual path on host
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-service
+spec:
+  type: NodePort
+  selector:
+    app: act-sdk-exec
+  ports:
+  - name: gui-port
+    protocol: TCP
+    port: 8002
+    targetPort: 8002
+    nodePort: ${GUI_FWD_PORT}
+  - name: wss-port
+    protocol: TCP
+    port: 5003
+    targetPort: 5003
+    nodePort: ${WSS_FWD_PORT}
+```
+
+Please note the following:
+
+1. Replace `${REGISTRY}`, `${REPOSITORY}`, and `${MAIN_EXEC_IMAGE}` with actual values.
+2. Replace `${GUI_FWD_PORT}` and `${WSS_FWD_PORT}` with actual port numbers.
+3. I've assumed the `workspace_app` volume is a persistent volume that needs to be claimed. Therefore, I've created a `PersistentVolumeClaim`. If this is not appropriate, you'll need to adjust the volume configuration.
+4. The local directories (`./log`, `./app_container/src`, etc.) are mapped to `hostPath` volumes in Kubernetes. You need to replace `/path/on/host/...` with the actual paths where the data will be stored on the host. If you're using a multi-node Kubernetes cluster, consider using a different type of volume that is accessible across nodes.
+5. The `depends_on` directive is not directly translatable to Kubernetes. If you need to control startup order, you might want to use init containers or other mechanisms.
+6. The `cap_add` and `security_opt` are translated to `securityContext` in Kubernetes, though they may not work exactly the same way.
+
+Please validate and customize these manifests further based on the actual requirements of your environment and Kubernetes cluster setup.

@@ -1,0 +1,104 @@
+To convert a Docker Compose file to Kubernetes manifests, you would need to create several YAML files that define the various resources in a Kubernetes cluster, such as Deployments, Services, PersistentVolumeClaims (PVCs), and ConfigMaps. Below is an example of how you might convert the provided Docker Compose service into Kubernetes manifests.
+
+Please note that Kubernetes does not natively support all Compose fields. For example, `depends_on` is not directly supported, as Kubernetes has its own mechanisms for managing container startup order through probes and init containers. Additionally, the `cap_add` and `security_opt` fields may require setting specific security contexts in your Kubernetes cluster, which may not be supported in all environments.
+
+Here's an example conversion for the `act-sdk_exec` service:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-app-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi # You need to specify the appropriate size
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+      - name: act-sdk-exec-container
+        image: ${REGISTRY}/${REPOSITORY}/${MAIN_EXEC_IMAGE}
+        tty: true
+        ports:
+        - containerPort: 8002 # serverアプリとの通信
+        - containerPort: 5003 # Websocketとの通信
+        env:
+        - name: PYTHONPATH
+          value: "/workspace/app-base/src:/workspace"
+        volumeMounts:
+        - name: workspace-app
+          mountPath: /workspace/app
+        - name: log-volume
+          mountPath: /workspace/app/exec/log
+        - name: src-volume
+          mountPath: /workspace/app/src
+        - name: configs-volume
+          mountPath: /workspace/app/exec/configs
+        - name: websocket-sv-volume
+          mountPath: /workspace/app-base/src/app_base/parts/websocket_sv
+        securityContext:
+          capabilities:
+            add: ["SYS_ADMIN"]
+          seccompProfile:
+            type: Unconfined
+        command: ["/bin/sh", "-c"]
+        args: ["cd /workspace/app/src && python3 SampleApp.py"]
+      volumes:
+      - name: workspace-app
+        persistentVolumeClaim:
+          claimName: workspace-app-pvc
+      # The following hostPath volumes are for illustration. For production, consider using PVCs or ConfigMaps.
+      - name: log-volume
+        hostPath:
+          path: /path/on/host/log
+      - name: src-volume
+        hostPath:
+          path: /path/on/host/app_container/src
+      - name: configs-volume
+        hostPath:
+          path: /path/on/host/app_container/configs
+      - name: websocket-sv-volume
+        hostPath:
+          path: /path/on/host/add_components/websocket_sv
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-service
+spec:
+  selector:
+    app: act-sdk-exec
+  ports:
+  - name: gui-port
+    protocol: TCP
+    port: ${GUI_FWD_PORT}
+    targetPort: 8002
+  - name: wss-port
+    protocol: TCP
+    port: ${WSS_FWD_PORT}
+    targetPort: 5003
+  type: ClusterIP # Or NodePort, LoadBalancer, etc., depending on your needs
+```
+
+Please adjust the resources, access modes, and storage classes as needed in the PersistentVolumeClaim (PVC) definition. Also, the hostPath volumes are for illustration purposes, and you should use appropriate PersistentVolumeClaims, ConfigMaps, or Secrets for storing configurations, logs, and source code.
+
+Remember to replace the `${REGISTRY}`, `${REPOSITORY}`, `${MAIN_EXEC_IMAGE}`, `${GUI_FWD_PORT}`, and `${WSS_FWD_PORT}` placeholders with your actual values. These could also be replaced with actual values or managed as environment variables or ConfigMaps within your cluster.
+
+Before applying these manifests, make sure to adapt them to your actual use case, considering factors like storage, networking, and security policies specific to your Kubernetes environment.

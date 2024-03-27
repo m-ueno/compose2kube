@@ -1,0 +1,102 @@
+To convert the provided Docker Compose file to Kubernetes manifests, we need to create a Deployment, a Service, a PersistentVolumeClaim, and potentially a ConfigMap or Secret for environment variables and sensitive data. Since there's not enough context for the entire setup, I'll make some assumptions and provide a basic conversion.
+
+Please note that Kubernetes does not support Docker Compose's `depends_on`, `cap_add`, `security_opt`, `tty`, and `restart` fields directly. Instead, we need to use Kubernetes' native fields and resources to achieve similar functionality.
+
+Below is an example of how you might convert the provided Compose file to a Kubernetes Deployment and Service, along with a PersistentVolumeClaim (PVC):
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+      - name: act-sdk-exec-container
+        image: <registry>/<repository>/<main_exec_image> # Replace with your actual image
+        tty: true
+        ports:
+        - containerPort: 8002
+        - containerPort: 5003
+        env:
+        - name: PYTHONPATH
+          value: "/workspace/app-base/src:/workspace"
+        volumeMounts:
+        - name: workspace-app
+          mountPath: /workspace/app
+        - name: log-volume
+          mountPath: /workspace/app/exec/log
+        - name: src-volume
+          mountPath: /workspace/app/src
+        - name: configs-volume
+          mountPath: /workspace/app/exec/configs
+        - name: websocket-sv-volume
+          mountPath: /workspace/app-base/src/app_base/parts/websocket_sv
+        securityContext:
+          privileged: true # This is not recommended in production!
+        command: ["/bin/sh", "-c"]
+        args: ["cd /workspace/app/src && python3 SampleApp.py"]
+      volumes:
+      - name: workspace-app
+        persistentVolumeClaim:
+          claimName: workspace-app-pvc
+      - name: log-volume
+        hostPath:
+          path: /path/to/your/log # Replace with the actual path on your host
+      - name: src-volume
+        hostPath:
+          path: /path/to/your/app_container/src
+      - name: configs-volume
+        hostPath:
+          path: /path/to/your/app_container/configs
+      - name: websocket-sv-volume
+        hostPath:
+          path: /path/to/your/add_components/websocket_sv
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-service
+spec:
+  selector:
+    app: act-sdk-exec
+  ports:
+  - name: gui
+    port: 8002
+    targetPort: 8002
+  - name: wss
+    port: 5003
+    targetPort: 5003
+  type: ClusterIP
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-app-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi # Specify the appropriate storage size
+```
+
+This example assumes that the volumes you've specified are mapped to the host's filesystem. You may need to adjust the `hostPath` or use other types of volumes depending on where and how you want to store your data.
+
+Please also be aware that setting `privileged: true` is not recommended for production environments due to security concerns. You would typically want to find alternative methods to grant necessary permissions to your containers in a more secure manner.
+
+Make sure to replace placeholders like `<registry>/<repository>/<main_exec_image>` with the actual values of your Docker image and adjust the host paths for your volumes to match your environment. Additionally, you should adjust the storage size for the PersistentVolumeClaim according to your needs.
+
+Remember, this is just a basic conversion and might not meet all your requirements. You may need to customize the manifests further to match your exact setup and configurations.
