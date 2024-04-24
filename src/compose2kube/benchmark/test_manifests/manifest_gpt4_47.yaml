@@ -1,0 +1,104 @@
+To convert the given Docker Compose file snippet to Kubernetes manifests, we'll need to create several Kubernetes resources such as Deployment, Service, ConfigMap, PersistentVolumeClaim (PVC), etc.
+
+Please be aware that Kubernetes does not have a built-in equivalent to `depends_on`, `tty`, `restart`, `cap_add`, or `security_opt`. Some of these features can be replicated with Kubernetes features or may not be necessary.
+
+Here is an example of what the Kubernetes manifests could look like for the provided Docker Compose service:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+      - name: act-sdk-exec
+        image: ${REGISTRY}/${REPOSITORY}/${MAIN_EXEC_IMAGE}
+        tty: true
+        ports:
+        - containerPort: 8002
+        - containerPort: 5003
+        env:
+        - name: PYTHONPATH
+          value: "/workspace/app-base/src:/workspace"
+        volumeMounts:
+        - name: workspace-app
+          mountPath: /workspace/app
+        - name: log
+          mountPath: /workspace/app/exec/log
+        - name: src
+          mountPath: /workspace/app/src
+        - name: configs
+          mountPath: /workspace/app/exec/configs
+        - name: websocket-sv
+          mountPath: /workspace/app-base/src/app_base/parts/websocket_sv
+        securityContext:
+          capabilities:
+            add:
+            - SYS_ADMIN
+        command: ["/bin/sh", "-c"]
+        args: ["cd /workspace/app/src && python3 SampleApp.py"]
+      volumes:
+      - name: workspace-app
+        persistentVolumeClaim:
+          claimName: workspace-app-pvc
+      - name: log
+        hostPath:
+          path: /path/to/log
+      - name: src
+        hostPath:
+          path: /path/to/app_container/src
+      - name: configs
+        hostPath:
+          path: /path/to/app_container/configs
+      - name: websocket-sv
+        hostPath:
+          path: /path/to/add_components/websocket_sv
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec
+spec:
+  selector:
+    app: act-sdk-exec
+  ports:
+  - name: gui-port
+    port: ${GUI_FWD_PORT}
+    targetPort: 8002
+  - name: wss-port
+    port: ${WSS_FWD_PORT}
+    targetPort: 5003
+  type: LoadBalancer
+
+# PVC for workspace_app volume
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-app-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+```
+
+Please replace `${REGISTRY}`, `${REPOSITORY}`, `${MAIN_EXEC_IMAGE}`, `${GUI_FWD_PORT}`, and `${WSS_FWD_PORT}` with the appropriate values for your setup.
+
+Also, note the following:
+- I've created a `PersistentVolumeClaim` for the `workspace_app` volume. You'll need to make sure that the PVC is properly provisioned and that it matches the storage needs of your application.
+- The `hostPath` volumes are used for the other volume mount points. This is for demonstration purposes. In a production environment, you would typically use a more resilient storage solution.
+- The `seccomp:unconfined` and `cap_add` are translated to a `securityContext` with added capabilities. Make sure that your Kubernetes cluster supports these security settings, as they may require privileged access.
+- The `Service` is of type `LoadBalancer`, which will provision an external IP to access your service. This may incur additional costs in cloud environments.
+
+Remember to replace the placeholders for volume `hostPath` with the actual paths on your nodes where the data should be stored. Also, you should adjust the deployment configuration according to your security and resilience requirements.

@@ -1,0 +1,102 @@
+Converting the provided Docker Compose file to Kubernetes manifests involves creating a set of Kubernetes resources such as Deployments, Services, ConfigMaps, and PersistentVolumeClaims. Below are the equivalent Kubernetes manifests based on the provided Compose file:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-app-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi # You need to define the storage size required
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec-deployment
+spec:
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+      - name: act-sdk-exec
+        image: ${REGISTRY}/${REPOSITORY}/${MAIN_EXEC_IMAGE}
+        tty: true
+        ports:
+        - containerPort: 8002 # GUI_FWD_PORT
+        - containerPort: 5003 # WSS_FWD_PORT
+        env:
+        - name: PYTHONPATH
+          value: "/workspace/app-base/src:/workspace"
+        volumeMounts:
+        - name: workspace-app
+          mountPath: /workspace/app
+        - name: log-volume
+          mountPath: /workspace/app/exec/log
+        - name: src-volume
+          mountPath: /workspace/app/src
+        - name: configs-volume
+          mountPath: /workspace/app/exec/configs
+        - name: websocket-sv-volume
+          mountPath: /workspace/app-base/src/app_base/parts/websocket_sv
+        securityContext:
+          capabilities:
+            add: ["SYS_ADMIN"]
+          seccompProfile:
+            type: Unconfined
+        command: ["/bin/sh", "-c"]
+        args: ["cd /workspace/app/src && python3 SampleApp.py"]
+      volumes:
+      - name: workspace-app
+        persistentVolumeClaim:
+          claimName: workspace-app-pvc
+      - name: log-volume
+        hostPath:
+          path: /path/to/log # Replace with actual path on the node
+      - name: src-volume
+        hostPath:
+          path: /path/to/src # Replace with actual path on the node
+      - name: configs-volume
+        hostPath:
+          path: /path/to/configs # Replace with actual path on the node
+      - name: websocket-sv-volume
+        hostPath:
+          path: /path/to/websocket_sv # Replace with actual path on the node
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-service
+spec:
+  selector:
+    app: act-sdk-exec
+  ports:
+  - name: gui
+    port: ${GUI_FWD_PORT}
+    targetPort: 8002
+  - name: wss
+    port: ${WSS_FWD_PORT}
+    targetPort: 5003
+  type: ClusterIP # Or NodePort, LoadBalancer if you want to expose externally
+
+```
+
+Please note the following:
+- Replace `${REGISTRY}`, `${REPOSITORY}`, and `${MAIN_EXEC_IMAGE}` with the actual values you intend to use.
+- Replace `${GUI_FWD_PORT}` and `${WSS_FWD_PORT}` with the actual port numbers.
+- Replace `/path/to/log`, `/path/to/src`, `/path/to/configs`, and `/path/to/websocket_sv` with the actual paths where the volumes should be mounted on the node. It's assumed that these are directories on the host machine that you want to mount into the container. If you want to use a different type of volume, you will need to update these sections accordingly.
+- Adjust the `storage` field under `PersistentVolumeClaim` according to your requirements.
+- The `depends_on` directive is not represented in Kubernetes, as Kubernetes manages service dependencies through readiness and liveness checks.
+- Security contexts in Kubernetes are set differently than in Docker Compose, so adjustments have been made to accommodate that.
+- The service `type: ClusterIP` is set by default, which makes the service only reachable within the Kubernetes cluster. If you need the service to be accessible from outside the cluster, consider changing the type to `NodePort` or `LoadBalancer`.
+
+Make sure to customize the above manifest according to your specific Kubernetes environment and requirements before applying it.

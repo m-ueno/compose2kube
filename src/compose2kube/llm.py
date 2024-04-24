@@ -7,13 +7,10 @@ from typing import Any
 import glom
 import joblib
 import yaml
-from dotenv import find_dotenv, load_dotenv
-from langchain.cache import SQLiteCache
 from langchain.chains.openai_functions import (
     convert_to_openai_function,
     get_openai_output_parser,
 )
-from langchain.globals import set_llm_cache
 from langchain_core.prompt_values import PromptValue
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.runnables import (
@@ -24,8 +21,6 @@ from langchain_core.runnables import (
 )
 from langchain_openai import ChatOpenAI
 
-load_dotenv(find_dotenv())
-set_llm_cache(SQLiteCache(database_path=".langchain.db"))
 logger = getLogger(__name__)
 joblib_cachedir = "/tmp/joblibcache"
 memory = joblib.Memory(joblib_cachedir, compress=True)

@@ -1,0 +1,113 @@
+Below is an example of how you might convert the provided Docker Compose configuration to Kubernetes manifests. Please note that this is a basic conversion, and you may need to further tweak the resulting YAML files to suit your specific deployment environment and requirements.
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-app-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec
+spec:
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+      - name: act-sdk-exec-container
+        image: ${REGISTRY}/${REPOSITORY}/${MAIN_EXEC_IMAGE}
+        tty: true
+        ports:
+        - containerPort: 8002
+        - containerPort: 5003
+        env:
+        - name: PYTHONPATH
+          value: "/workspace/app-base/src:/workspace"
+        volumeMounts:
+        - name: workspace-app
+          mountPath: /workspace/app
+        - name: log-volume
+          mountPath: /workspace/app/exec/log
+        - name: src-volume
+          mountPath: /workspace/app/src
+        - name: configs-volume
+          mountPath: /workspace/app/exec/configs
+        - name: websocket-sv-volume
+          mountPath: /workspace/app-base/src/app_base/parts/websocket_sv
+        securityContext:
+          capabilities:
+            add:
+            - SYS_ADMIN
+          seLinuxOptions:
+            type: spc_t
+        command: ["/bin/sh", "-c"]
+        args: ["cd /workspace/app/src && python3 SampleApp.py"]
+      volumes:
+      - name: workspace-app
+        persistentVolumeClaim:
+          claimName: workspace-app-pvc
+      - name: log-volume
+        hostPath:
+          path: /path/to/log
+      - name: src-volume
+        hostPath:
+          path: /path/to/app_container/src
+      - name: configs-volume
+        hostPath:
+          path: /path/to/app_container/configs
+      - name: websocket-sv-volume
+        hostPath:
+          path: /path/to/add_components/websocket_sv
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-service
+spec:
+  selector:
+    app: act-sdk-exec
+  ports:
+  - name: gui-port
+    port: ${GUI_FWD_PORT}
+    targetPort: 8002
+  - name: wss-port
+    port: ${WSS_FWD_PORT}
+    targetPort: 5003
+  type: ClusterIP
+```
+
+**Notes:**
+
+1. Replace `${REGISTRY}`, `${REPOSITORY}`, and `${MAIN_EXEC_IMAGE}` with your actual image registry, repository, and image name.
+
+2. Replace `${GUI_FWD_PORT}` and `${WSS_FWD_PORT}` with the actual port numbers you want to expose.
+
+3. The `volumes` section in the Deployment manifest includes `hostPath` volumes for simplicity, but you should replace these with your desired type of persistent storage (like NFS, cloud-based storage, etc.).
+
+4. The `securityContext` field includes a `capabilities` block with `SYS_ADMIN`, but this is often discouraged in a Kubernetes environment for security reasons. Make sure this is absolutely necessary for your application and acceptable in your deployment environment.
+
+5. The `restart: always` policy in Docker Compose translates to a Kubernetes Deployment which inherently has a restart policy of `Always`.
+
+6. `depends_on` is not directly translatable to Kubernetes, but if `act-sdk_app` is another service that needs to start before `act-sdk_exec`, you would create another Deployment for it and might need to handle service dependencies through readiness probes, init containers, or other orchestration mechanisms.
+
+7. The conversion assumes `/path/to/log`, `/path/to/app_container/src`, `/path/to/app_container/configs`, and `/path/to/add_components/websocket_sv` are paths on the Kubernetes nodes. You should adjust these paths as necessary to match your cluster's configuration.
+
+8. The PersistentVolumeClaim (PVC) is a basic setup. You may need to configure StorageClasses or adjust the access modes and storage requests according to your cluster's storage provisioner and requirements.
+
+Remember to adjust the manifest according to your actual deployment needs and best practices for your Kubernetes environment.

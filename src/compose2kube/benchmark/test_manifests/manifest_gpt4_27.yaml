@@ -1,0 +1,92 @@
+The provided Docker Compose file describes a service named `act-sdk_exec` with various configurations such as image, environment variables, volumes, etc. To convert this to Kubernetes manifests, we will create a Deployment and a Service for the `act-sdk_exec` service. Note that the Docker Compose `depends_on` field does not have a direct equivalent in Kubernetes, as Kubernetes will start all the pods in parallel and expects the applications to handle their dependencies.
+
+The following is an example of how you might convert the Docker Compose file to Kubernetes manifests. Keep in mind that this is a basic conversion and additional adjustments may be necessary depending on the specific requirements of your application and your Kubernetes environment.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+      - name: act-sdk-exec
+        image: ${REGISTRY}/${REPOSITORY}/${MAIN_EXEC_IMAGE}
+        tty: true
+        ports:
+        - containerPort: 8002
+        - containerPort: 5003
+        env:
+        - name: PYTHONPATH
+          value: "/workspace/app-base/src:/workspace"
+        volumeMounts:
+        - name: workspace-app
+          mountPath: /workspace/app
+        - name: log
+          mountPath: /workspace/app/exec/log
+        - name: src
+          mountPath: /workspace/app/src
+        - name: configs
+          mountPath: /workspace/app/exec/configs
+        - name: websocket-sv
+          mountPath: /workspace/app-base/src/app_base/parts/websocket_sv
+        securityContext:
+          capabilities:
+            add:
+            - SYS_ADMIN
+          seccompProfile:
+            type: Unconfined
+        command: ["/bin/sh", "-c"]
+        args: ["cd /workspace/app/src && python3 SampleApp.py"]
+      volumes:
+      - name: workspace-app
+        emptyDir: {} # You need to define the correct volume source depending on your needs
+      - name: log
+        hostPath:
+          path: /path/on/host/log # Replace with the correct host path
+      - name: src
+        hostPath:
+          path: /path/on/host/src # Replace with the correct host path
+      - name: configs
+        hostPath:
+          path: /path/on/host/configs # Replace with the correct host path
+      - name: websocket-sv
+        hostPath:
+          path: /path/on/host/websocket_sv # Replace with the correct host path
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-service
+spec:
+  selector:
+    app: act-sdk-exec
+  ports:
+  - name: gui-port
+    port: ${GUI_FWD_PORT}
+    targetPort: 8002
+  - name: wss-port
+    port: ${WSS_FWD_PORT}
+    targetPort: 5003
+  type: ClusterIP # Or NodePort, LoadBalancer, etc., depending on your needs
+```
+
+A few important notes:
+
+1. Replace `${REGISTRY}`, `${REPOSITORY}`, `${MAIN_EXEC_IMAGE}`, `${GUI_FWD_PORT}`, and `${WSS_FWD_PORT}` with the actual values.
+2. The Docker Compose `volumes` have been converted to Kubernetes volumes using `emptyDir` and `hostPath`. You may want to use Persistent Volumes (PV) and Persistent Volume Claims (PVC) in a production environment.
+3. The `tty: true` is translated into `stdin` and `tty` being set to `true` in the container spec.
+4. The `restart: always` policy in Docker is equivalent to the restart policy of `Always` in Kubernetes, which is the default for deployments.
+5. The `depends_on` field is not represented here because Kubernetes pods are created in parallel; inter-pod dependencies need to be managed by the application logic or by using readiness probes.
+6. For the security context, the `cap_add` and `security_opt` fields are translated to the appropriate Kubernetes `securityContext` settings.
+7. The `entrypoint` is split into `command` and `args` in the Kubernetes container spec.

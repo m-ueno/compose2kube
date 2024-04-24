@@ -1,0 +1,106 @@
+To convert the provided Docker Compose file snippet into Kubernetes manifests, you'll need to create a few different Kubernetes objects, including a Deployment, Service, and PersistentVolumeClaim. The following is a basic example of what the resulting Kubernetes manifests might look like. Note that you will need to replace the environment variable placeholders (like `${REGISTRY}` and `${REPOSITORY}`) with actual values before applying the manifests to your Kubernetes cluster.
+
+Please adjust the following manifests to match your specific requirements and environment configuration:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+      - name: act-sdk-exec
+        image: <registry>/<repository>/<main-exec-image> # Replace with actual values
+        tty: true
+        ports:
+        - containerPort: 8002 # GUI_FWD_PORT
+        - containerPort: 5003 # WSS_FWD_PORT
+        env:
+        - name: PYTHONPATH
+          value: "/workspace/app-base/src:/workspace"
+        volumeMounts:
+        - name: workspace-app
+          mountPath: /workspace/app
+        - name: log-volume
+          mountPath: /workspace/app/exec/log
+        - name: src-volume
+          mountPath: /workspace/app/src
+        - name: configs-volume
+          mountPath: /workspace/app/exec/configs
+        - name: websocket-sv-volume
+          mountPath: /workspace/app-base/src/app_base/parts/websocket_sv
+        securityContext:
+          capabilities:
+            add: ["SYS_ADMIN"]
+          seccompProfile:
+            type: Unconfined
+        command: ["/bin/sh", "-c"]
+        args: ["cd /workspace/app/src && python3 SampleApp.py"]
+      volumes:
+      - name: workspace-app
+        persistentVolumeClaim:
+          claimName: workspace-app-pvc
+      - name: log-volume
+        hostPath:
+          path: /path/to/log # Replace with actual path
+      - name: src-volume
+        hostPath:
+          path: /path/to/app_container/src # Replace with actual path
+      - name: configs-volume
+        hostPath:
+          path: /path/to/app_container/configs # Replace with actual path
+      - name: websocket-sv-volume
+        hostPath:
+          path: /path/to/add_components/websocket_sv # Replace with actual path
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-service
+spec:
+  selector:
+    app: act-sdk-exec
+  ports:
+  - name: gui-port
+    protocol: TCP
+    port: 8002 # GUI_FWD_PORT
+    targetPort: 8002
+  - name: wss-port
+    protocol: TCP
+    port: 5003 # WSS_FWD_PORT
+    targetPort: 5003
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-app-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi # Adjust size as needed
+```
+
+In this example, the following Kubernetes objects are created:
+- A Deployment named `act-sdk-exec-deployment`, which defines the desired state of the application including the image to be run, environment variables, volumes, and security context. The `tty: true` setting is translated into `stdin: true` and `tty: true` in the container spec.
+- A Service named `act-sdk-exec-service`, which defines how to access the application using a stable IP address within the Kubernetes cluster.
+- A PersistentVolumeClaim named `workspace-app-pvc`, which requests a persistent volume for the `workspace_app` volume defined in the Compose file. The `hostPath` volumes are translated as well, but you need to replace the paths with the actual paths on your Kubernetes node where the data should be stored.
+
+Please note:
+- The `depends_on` field from the Docker Compose file is not directly translatable to Kubernetes, as Kubernetes handles inter-container dependencies differently, often through readiness checks.
+- The environment variables for the port numbers and image details must be replaced with actual values.
+- The `security_opt` and `cap_add` fields have been translated to the security context of the container. However, granting `SYS_ADMIN` capabilities and setting the seccomp profile to "unconfined" can be a security risk and should be carefully considered before use.
+- You may need to set up proper Role-Based Access Control (RBAC) depending on the permissions required by your application.
+- Persistent volume handling in Kubernetes is more complex than in Docker Compose. You may need to configure a StorageClass or specify a particular PersistentVolume depending on your cluster setup.
+- The paths for `hostPath` volumes must exist on the node where the pod gets scheduled, and this type of volume can have different implications for a multi-node cluster. You should consider using a more appropriate persistent storage solution if your application will be deployed in a multi-node environment.

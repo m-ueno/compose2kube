@@ -1,0 +1,107 @@
+To convert the provided Docker Compose file to Kubernetes manifests, we'll need to create several Kubernetes resources, such as a Deployment, Service, and PersistentVolumeClaim (PVC). Please note that the conversion process might not be one-to-one, as Kubernetes has different concepts and configurations compared to Docker Compose.
+
+Here's an example conversion of the Docker Compose file to Kubernetes manifests:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+        - name: act-sdk-exec
+          image: ${REGISTRY}/${REPOSITORY}/${MAIN_EXEC_IMAGE}
+          tty: true
+          ports:
+            - containerPort: 8002 # serverアプリとの通信
+            - containerPort: 5003 # Websocketとの通信
+          env:
+            - name: PYTHONPATH
+              value: "/workspace/app-base/src:/workspace"
+          volumeMounts:
+            - name: workspace-app
+              mountPath: /workspace/app
+            - name: log-volume
+              mountPath: /workspace/app/exec/log
+            - name: src-volume
+              mountPath: /workspace/app/src
+            - name: configs-volume
+              mountPath: /workspace/app/exec/configs
+            - name: websocket-sv-volume
+              mountPath: /workspace/app-base/src/app_base/parts/websocket_sv
+          securityContext:
+            capabilities:
+              add:
+                - SYS_ADMIN
+            seccompProfile:
+              type: Unconfined
+          command: ["/bin/sh", "-c"]
+          args: ["cd /workspace/app/src && python3 SampleApp.py"]
+      volumes:
+        - name: workspace-app
+          persistentVolumeClaim:
+            claimName: workspace-app-pvc
+        # Host volumes are not recommended in Kubernetes for production use. The following entries are just for example.
+        - name: log-volume
+          hostPath:
+            path: /path/to/host/log
+        - name: src-volume
+          hostPath:
+            path: /path/to/host/app_container/src
+        - name: configs-volume
+          hostPath:
+            path: /path/to/host/app_container/configs
+        - name: websocket-sv-volume
+          hostPath:
+            path: /path/to/host/add_components/websocket_sv
+```
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-service
+spec:
+  selector:
+    app: act-sdk-exec
+  ports:
+    - name: gui
+      protocol: TCP
+      port: 8002
+      targetPort: 8002
+    - name: websocket
+      protocol: TCP
+      port: 5003
+      targetPort: 5003
+  type: NodePort # or LoadBalancer if you're on a cloud provider that supports it
+```
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-app-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi # Adjust the size as needed
+```
+
+Please replace the `${REGISTRY}`, `${REPOSITORY}`, and `${MAIN_EXEC_IMAGE}` placeholders with actual values from your environment. Also, replace the `/path/to/host/...` with the actual host paths you want to map, but keep in mind that using `hostPath` is not recommended for production workloads in Kubernetes.
+
+For the `depends_on` feature, you'll need to ensure that your `act-sdk-app` service (not provided in your Docker Compose) is also converted to Kubernetes manifests and that it's running before `act-sdk-exec`. Kubernetes doesn't have a direct equivalent to `depends_on`, but you can manage dependencies using Init Containers or by defining readiness and liveness probes for your containers to ensure they are started in the correct order.
+
+The environment variable placeholders like `${GUI_FWD_PORT}` and `${WSS_FWD_PORT}` should also be replaced with actual values or handled using ConfigMaps or Secrets in Kubernetes.
+
+Lastly, the `cap_add` and `security_opt` options don't have direct equivalents in Kubernetes. You might need to adjust your security context to grant the necessary permissions, as I've included in the `securityContext` field, but you should carefully consider the security implications of doing so.

@@ -1,0 +1,121 @@
+To convert the provided Docker Compose file into Kubernetes manifests, we need to create a Deployment, Service, ConfigMap, PersistentVolumeClaim (PVC), and possibly other resources depending on the requirements. Below are the Kubernetes manifest examples based on the Docker Compose file provided:
+
+1. **PersistentVolumeClaim** for `workspace_app` volume:
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-app-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+```
+
+2. **ConfigMap** to hold environment variables (if needed):
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  PYTHONPATH: "/workspace/app-base/src:/workspace"
+```
+
+3. **Deployment** for `act-sdk_exec` service:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+        - name: act-sdk-exec
+          image: "${REGISTRY}/${REPOSITORY}/${MAIN_EXEC_IMAGE}"
+          tty: true
+          ports:
+            - containerPort: 8002 # GUI_FWD_PORT
+            - containerPort: 5003 # WSS_FWD_PORT
+          envFrom:
+            - configMapRef:
+                name: app-config  # Assuming environment variables are stored in ConfigMap
+          volumeMounts:
+            - name: workspace-app
+              mountPath: /workspace/app
+            - name: log-volume
+              mountPath: /workspace/app/exec/log
+            - name: src-volume
+              mountPath: /workspace/app/src
+            - name: configs-volume
+              mountPath: /workspace/app/exec/configs
+            - name: websocket-sv-volume
+              mountPath: /workspace/app-base/src/app_base/parts/websocket_sv
+          securityContext:
+            capabilities:
+              add:
+                - SYS_ADMIN
+            seccompProfile:
+              type: Unconfined
+          command: ["/bin/sh", "-c"]
+          args: ["cd /workspace/app/src && python3 SampleApp.py"]
+      volumes:
+        - name: workspace-app
+          persistentVolumeClaim:
+            claimName: workspace-app-pvc
+        - name: log-volume
+          hostPath:
+            path: /path/to/log  # Replace with the actual host path
+        - name: src-volume
+          hostPath:
+            path: /path/to/app_container/src  # Replace with the actual host path
+        - name: configs-volume
+          hostPath:
+            path: /path/to/app_container/configs  # Replace with the actual host path
+        - name: websocket-sv-volume
+          hostPath:
+            path: /path/to/add_components/websocket_sv  # Replace with the actual host path
+```
+
+4. **Service** to expose `act-sdk_exec`:
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-service
+spec:
+  selector:
+    app: act-sdk-exec
+  ports:
+    - name: gui-port
+      port: ${GUI_FWD_PORT}
+      targetPort: 8002
+    - name: wss-port
+      port: ${WSS_FWD_PORT}
+      targetPort: 5003
+  type: ClusterIP  # Use NodePort or LoadBalancer if external access is required
+```
+
+Note that you will need to replace `${REGISTRY}`, `${REPOSITORY}`, and `${MAIN_EXEC_IMAGE}` with the actual values for the image, as well as `${GUI_FWD_PORT}` and `${WSS_FWD_PORT}` with the actual port numbers you want to expose. Also, for volume mounts using `hostPath`, you'll need to provide the actual paths on the host where the logs, source code, configs, and web socket server components are located.
+
+Please ensure you have Persistent Volumes available if you use `PersistentVolumeClaims`, and you may need to adjust the access modes and storage size as per your requirements.
+
+You may also need to create additional resources like `Ingress` if you want to expose your service outside the Kubernetes cluster, or adjust the `securityContext` according to your actual security requirements.
+
+Remember to apply these manifests to your Kubernetes cluster using `kubectl`:
+
+```bash
+kubectl apply -f <manifest_file>.yaml
+```
+
+Make sure to replace `<manifest_file>.yaml` with the actual file name of your Kubernetes manifest.

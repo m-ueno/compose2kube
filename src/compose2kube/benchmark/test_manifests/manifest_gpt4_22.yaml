@@ -1,0 +1,122 @@
+To convert a Docker Compose file to Kubernetes manifests, you'll need to manually create Kubernetes resources like Deployments, Services, ConfigMaps, PersistentVolumeClaims, etc. 
+
+Below is an example of how you might convert the Docker Compose service `act-sdk_exec` into Kubernetes manifests. Note that environment variables like `${REGISTRY}`, `${REPOSITORY}`, `${MAIN_EXEC_IMAGE}`, `${GUI_FWD_PORT}`, and `${WSS_FWD_PORT}` need to be replaced with actual values or configured as ConfigMaps or Secrets in Kubernetes.
+
+First, let's create a Deployment for the `act-sdk_exec` service:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: act-sdk-exec
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: act-sdk-exec
+  template:
+    metadata:
+      labels:
+        app: act-sdk-exec
+    spec:
+      containers:
+        - name: act-sdk-exec
+          image: <REGISTRY>/<REPOSITORY>/<MAIN_EXEC_IMAGE>
+          tty: true
+          securityContext:
+            capabilities:
+              add:
+                - SYS_ADMIN
+            seccompProfile:
+              type: Unconfined
+          ports:
+            - containerPort: 8002
+            - containerPort: 5003
+          env:
+            - name: PYTHONPATH
+              value: "/workspace/app-base/src:/workspace"
+          volumeMounts:
+            - name: workspace-app
+              mountPath: /workspace/app
+            - name: log
+              mountPath: /workspace/app/exec/log
+            - name: src
+              mountPath: /workspace/app/src
+            - name: configs
+              mountPath: /workspace/app/exec/configs
+            - name: websocket-sv
+              mountPath: /workspace/app-base/src/app_base/parts/websocket_sv
+          command: ["/bin/sh", "-c"]
+          args: ["cd /workspace/app/src && python3 SampleApp.py"]
+      volumes:
+        - name: workspace-app
+          persistentVolumeClaim:
+            claimName: workspace-app-pvc
+        # The following hostPath volumes are not recommended for production use.
+        # They should be replaced with proper PersistentVolumeClaims.
+        - name: log
+          hostPath:
+            path: /path/on/host/log
+        - name: src
+          hostPath:
+            path: /path/on/host/app_container/src
+        - name: configs
+          hostPath:
+            path: /path/on/host/app_container/configs
+        - name: websocket-sv
+          hostPath:
+            path: /path/on/host/add_components/websocket_sv
+```
+
+Next, you would create a Service to expose the ports. Here's an example for the `GUI_FWD_PORT`:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-gui
+spec:
+  selector:
+    app: act-sdk-exec
+  ports:
+    - protocol: TCP
+      port: <GUI_FWD_PORT>
+      targetPort: 8002
+  type: NodePort
+```
+
+Another Service for `WSS_FWD_PORT`:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: act-sdk-exec-wss
+spec:
+  selector:
+    app: act-sdk-exec
+  ports:
+    - protocol: TCP
+      port: <WSS_FWD_PORT>
+      targetPort: 5003
+  type: NodePort
+```
+
+Lastly, you need to create a PersistentVolumeClaim (PVC) for the `workspace_app` volume if it needs to persist data:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-app-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+```
+
+Please replace the placeholder paths (e.g., `/path/on/host/log`) with the actual paths on your nodes where the data should be stored. You should also replace the placeholder values for image, ports, and environment variables with your actual values.
+
+Remember that this is a basic conversion and might not work out of the box depending on your specific needs and the environment configuration. You may need to configure storage, networking, and other aspects of your Kubernetes cluster appropriately.
