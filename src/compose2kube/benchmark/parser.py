@@ -1,3 +1,5 @@
+import warnings
+
 import marko
 import marko.inline
 from langchain_core.output_parsers import StrOutputParser
@@ -28,8 +30,7 @@ class MDCodeBlockOutputParser(StrOutputParser):
                         codes.append(blockchild.children.strip())
                 return "\n---\n".join(codes)
             case x if x % 2 == 1:
-                raise ValueError(
-                    "the text contains ``` but not match any codeblock" + text
-                )
+                warnings.warn("the text contains odd number of ```:" + text)
+                return ""
 
         raise Exception("must not reach here")

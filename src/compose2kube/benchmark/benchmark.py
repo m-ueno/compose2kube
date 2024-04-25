@@ -1,4 +1,4 @@
-from operator import itemgetter
+from operator import attrgetter, itemgetter
 
 import yaml
 from langchain.chains.openai_functions import (
@@ -126,6 +126,16 @@ chains_convert_grade = RunnableParallel(
         | RunnableLambda(
             lambda d: d.page_content  # TODO: Make chains_grade accepts Document
         ).map()
+    ).pick(["compose", "judge", "output", "output_parsed"])
+    | chains_grade,
+    # Method5' expert prompting (JSON mode)
+    expertprompting_json=RunnablePassthrough.assign(
+        output_parsed=itemgetter("compose")
+        | to_doc
+        | CONVERT_METHODS["expertprompting_json"]
+        | RunnableLambda(
+            lambda d: d.page_content
+        ).map()  # TODO: Make chains_grade accepts Document
     ).pick(["compose", "judge", "output", "output_parsed"])
     | chains_grade,
 )
