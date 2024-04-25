@@ -4,6 +4,11 @@ from logging import getLogger
 from operator import itemgetter
 from typing import List, cast
 
+import yaml
+from langchain.chains.openai_functions import (
+    convert_to_openai_function,
+    get_openai_output_parser,
+)
 from langchain.prompts import PromptTemplate
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
@@ -21,6 +26,7 @@ from langchain_openai import ChatOpenAI
 
 from compose2kube import templates
 from compose2kube.benchmark.parser import MDCodeBlockOutputParser
+from compose2kube.evaluator import Manifests
 from compose2kube.model import ChatOpenAIMultiGenerations
 
 logger = getLogger(__name__)
@@ -195,6 +201,56 @@ chain_expert_prompting: RunnableSerializable[Document, List[Document]] = (
     | (MDCodeBlockOutputParser() | to_doc).map()
 )
 
+
+def _join_manifests(xs: list[dict | str]) -> str:
+    #  list[str|dict] にした結果のその場しのぎの関数
+    child = xs[0]
+    if isinstance(child, dict):
+        return yaml.safe_dump_all(xs)
+    elif isinstance(child, str):
+        return "\n---\n".join(xs)  # type:ignore
+    else:
+        raise ValueError(f"argument must be list[dit|str]: {xs}")
+
+
+chain_expert_prompting_json: RunnableSerializable[Document, List[Document]] = (
+    RunnableParallel(
+        compose=RunnableLambda(lambda doc: cast(Document, doc).page_content),
+    )
+    .assign(
+        expert_identity=(
+            {"question": lambda _: "convert the composefile to kubernetes manifests"}
+            | prompt_expert_identity
+            | ChatOpenAI(cache=True, model_kwargs={"seed": 1})
+            | StrOutputParser()
+        ),
+        question={"compose": itemgetter("compose")}
+        | prompt_zeroshot
+        | (lambda p: p.to_string()),
+    )
+    .pick(["expert_identity", "question"])
+    | prompt_expertprompting
+    | ChatOpenAIMultiGenerations(
+        cache=True,
+        model_kwargs={
+            "seed": 1,
+            "functions": [convert_to_openai_function(Manifests)],
+            "function_call": {"name": "Manifests"},
+        },
+    ).configurable_fields(
+        model_name=ConfigurableField(id="model_name"),
+        n=ConfigurableField(id="n", name="llm_n"),
+    )
+    | (
+        (
+            get_openai_output_parser([Manifests])
+            | (lambda m: m.manifests)
+            | _join_manifests
+        ).with_fallbacks([RunnableLambda(lambda _: "parse failed")])
+        | to_doc
+    ).map()
+)
+
 #
 # input is a Document, output is a List[Document]
 CONVERT_METHODS = dict(
@@ -202,4 +258,5 @@ CONVERT_METHODS = dict(
     canonical_annotate_kompose=chain_canonical_annotate_kompose,
     zeroshottext=chain_zeroshottext,
     expertprompting_text=chain_expert_prompting,
+    expertprompting_json=chain_expert_prompting_json,
 )
