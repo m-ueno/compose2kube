@@ -123,3 +123,15 @@ prompt_eval_manifests_create = """You are a skillful devops engineer. Please eva
 ####Reference####
 {reference}
 """
+
+prompt_fewshot = f"""You are a skillful devops engineer. Please output kubenetes manifest corresponding to the given files.
+
+Make sure to answer in the correct format.
+If you want inform users something, make it inline comment inside yaml.
+
+The provided examples are for illustration purposes only and should not be repeated.
+**EXAMPLES**
+
+**INPUT**
+{{compose}}
+"""
