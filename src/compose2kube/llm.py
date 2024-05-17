@@ -33,6 +33,7 @@ GPT4TURBO = GPT4_0125
 GPT35TURBO = "gpt-3.5-turbo"
 # GPT4 8k window
 GPT4_0613 = "gpt-4-0613"
+GPT4o_0513 = "gpt-4o-2024-05-13"
 
 
 @memory.cache
