@@ -162,15 +162,28 @@ prompt_zeroshot = PromptTemplate.from_template(
     "convert the composefile to kubernetes manifests:\n{compose}"
 )
 
+
+@chain_decorator
+def doc_to_str(doc: Document) -> str:
+    return doc.page_content
+
+
+# Document => List[Document]
 chain_zeroshottext = (
-    {"compose": lambda doc: doc.page_content}
+    {"compose": doc_to_str}
     | prompt_zeroshot
     | ChatOpenAIMultiGenerations(
         cache=True, model_kwargs={"seed": 1}
     ).configurable_fields(
-        n=ConfigurableField(id="n"), model_name=ConfigurableField(id="model_name")
-    )
-    | (MDCodeBlockOutputParser() | to_doc).map()
+        model_name=ConfigurableField(id="model_name"),
+        n=ConfigurableField(id="n", name="llm_n"),
+    )  # => List[AIMessage]
+    | RunnableLambda(
+        lambda s: Document(
+            page_content=MDCodeBlockOutputParser().invoke(s),
+            metadata=dict(output_str=StrOutputParser().invoke(s)),
+        )
+    ).map()  # => List[Document]
 )
 
 
