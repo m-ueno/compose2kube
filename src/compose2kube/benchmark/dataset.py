@@ -470,3 +470,7 @@ doc4 = Document(page_content=input4, metadata=dict(test="envvar", orig_name="inp
 doc5 = Document(page_content=input5, metadata=dict(test="dnsname", orig_name="input5"))
 doc9 = Document(page_content=input9, metadata=dict(test="comment", orig_name="input9"))
 doc12 = Document(page_content=input12, metadata=dict(test="healthcheck", orig_name="input12"))
+
+INPUTS = [doc3, doc4, doc5, doc9, doc12]
+OUTPUTS = [output3, output4, output5, output9, output12]
+EXAMPLES = list(zip(INPUTS, OUTPUTS))
