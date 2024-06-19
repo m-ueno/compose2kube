@@ -1,11 +1,9 @@
 from operator import attrgetter, itemgetter
 
 import yaml
-from langchain.chains.openai_functions import (
-    convert_to_openai_function,
-    get_openai_output_parser,
-)
+from langchain.chains.openai_functions import convert_to_openai_function, get_openai_output_parser
 from langchain.prompts import PromptTemplate
+from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import (
     ConfigurableField,
@@ -33,6 +31,10 @@ def _join_manifests(xs: list[dict | str]) -> str:
         raise ValueError(f"argument must be list[dit|str]: {xs}")
 
 
+def dedoc(doc: Document) -> str:
+    return doc.page_content
+
+
 # さまざまなメソッドからなるチェーン
 # receive {compose, judge}
 chains_convert_grade = RunnableParallel(
@@ -44,9 +46,7 @@ chains_convert_grade = RunnableParallel(
         | PromptTemplate.from_template(
             "convert the composefile to kubernetes manifests:\n{compose}"
         )
-        | ChatOpenAIMultiGenerations(
-            cache=True, model_kwargs={"seed": 1}
-        ).configurable_fields(
+        | ChatOpenAIMultiGenerations(cache=True, model_kwargs={"seed": 1}).configurable_fields(
             model_name=ConfigurableField(id="model_name"),
             n=ConfigurableField(id="n", name="llm_n"),
         )
@@ -80,11 +80,7 @@ chains_convert_grade = RunnableParallel(
     )
     .assign(  # {compose, judge, output}
         output_parsed=itemgetter("output")
-        | (
-            get_openai_output_parser([Manifests])
-            | (lambda m: m.manifests)
-            | _join_manifests
-        )
+        | (get_openai_output_parser([Manifests]) | (lambda m: m.manifests) | _join_manifests)
         .with_fallbacks([RunnableLambda(lambda _: "parse failed")])
         .map(),
     )
@@ -123,9 +119,7 @@ chains_convert_grade = RunnableParallel(
         output_parsed=itemgetter("compose")
         | to_doc
         | CONVERT_METHODS["expertprompting_text"]  # receives Document
-        | RunnableLambda(
-            lambda d: d.page_content  # TODO: Make chains_grade accepts Document
-        ).map()
+        | dedoc.map()  # TODO: make chains_grade accept Document, not str
     ).pick(["compose", "judge", "output", "output_parsed"])
     | chains_grade,
     # Method5' expert prompting (JSON mode)
@@ -133,9 +127,7 @@ chains_convert_grade = RunnableParallel(
         output_parsed=itemgetter("compose")
         | to_doc
         | CONVERT_METHODS["expertprompting_json"]
-        | RunnableLambda(
-            lambda d: d.page_content
-        ).map()  # TODO: Make chains_grade accepts Document
+        | dedoc.map()
     ).pick(["compose", "judge", "output", "output_parsed"])
     | chains_grade,
 )
