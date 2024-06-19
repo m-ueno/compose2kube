@@ -1,3 +1,5 @@
+from langchain_core.documents import Document
+
 # pod controller
 input3 = """
 services:
@@ -462,3 +464,9 @@ spec:
             failureThreshold: 3
           restartPolicy: Always
 """
+
+doc3 = Document(page_content=input3, metadata=dict(test="podcontroller", orig_name="input3"))
+doc4 = Document(page_content=input4, metadata=dict(test="envvar", orig_name="input4"))
+doc5 = Document(page_content=input5, metadata=dict(test="dnsname", orig_name="input5"))
+doc9 = Document(page_content=input9, metadata=dict(test="comment", orig_name="input9"))
+doc12 = Document(page_content=input12, metadata=dict(test="healthcheck", orig_name="input12"))
