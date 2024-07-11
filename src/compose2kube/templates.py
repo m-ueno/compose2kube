@@ -1,7 +1,7 @@
 import inspect
 import unittest
 
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate, BasePromptTemplate
 
 prompt1_for_kompose = ChatPromptTemplate.from_messages(
     [
@@ -124,14 +124,87 @@ prompt_eval_manifests_create = """You are a skillful devops engineer. Please eva
 {reference}
 """
 
-prompt_fewshot = f"""You are a skillful devops engineer. Please output kubenetes manifest corresponding to the given files.
 
+# prompt_fewshot = PromptTemplate.from_template(
+#     """You are a skillful devops engineer. Please output kubenetes manifest corresponding to the given files.
+
+# Make sure to answer in the correct format.
+# If you want inform users something, make it inline comment inside yaml.
+
+# The provided examples are for illustration purposes only and should not be repeated.
+# **EXAMPLES**
+# {{EXAMPLES}}
+
+# **INPUT**
+# {{compose}}
+# """,
+#     template_format="jinja2",
+# )
+
+template_fewshot = PromptTemplate.from_template(
+    """You are a skillful devops engineer. Please output kubenetes manifest corresponding to the given files.
 Make sure to answer in the correct format.
 If you want inform users something, make it inline comment inside yaml.
 
 The provided examples are for illustration purposes only and should not be repeated.
-**EXAMPLES**
 
-**INPUT**
+###EXAMPLES###
+{{examples}}
+
+###END OF EXAMPLES###
+
+###INPUT###
 {{compose}}
-"""
+
+###OUTPUT###
+    """,
+    template_format="jinja2",
+    # partial_variables={"examples": examples},
+)
+
+
+def make_prompt_fewshot_outputonly(outputs: list[str]) -> BasePromptTemplate:
+    """Return a augmented prompt template that accepts 'compose'"""
+
+    examples = ""
+    for i, output in enumerate(outputs):
+        examples += f"###Example output {i}###\n"
+        examples += output.strip() + "\n\n"
+
+    return template_fewshot.partial(examples=examples)
+    return PromptTemplate.from_template(
+        """You are a skillful devops engineer. Please output kubenetes manifest corresponding to the given files.
+Make sure to answer in the correct format.
+If you want inform users something, make it inline comment inside yaml.
+
+The provided examples are for illustration purposes only and should not be repeated.
+
+###EXAMPLES###
+{{examples}}
+
+###END OF EXAMPLES###
+
+###INPUT###
+{{compose}}
+
+###OUTPUT###
+    """,
+        template_format="jinja2",
+        partial_variables={"examples": examples},
+    )
+
+
+def make_prompt_fewshot(outputs: list[str], inputs: list[str] | None) -> BasePromptTemplate:
+    """Return a augmented prompt template that accepts 'compose'"""
+
+    if inputs is None:
+        return make_prompt_fewshot_outputonly(outputs)
+
+    examples = ""
+    for i, (input, output) in enumerate(zip(inputs, outputs)):
+        examples += f"###Example input {i+1}###\n"
+        examples += input.strip() + "\n\n"
+        examples += f"###Example output {i+1}###\n"
+        examples += output.strip() + "\n\n"
+
+    return template_fewshot.partial(examples=examples)
