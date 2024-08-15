@@ -11,6 +11,9 @@ from langchain_core.runnables import (
     RunnableParallel,
     RunnablePassthrough,
 )
+from langchain_core.runnables import (
+    chain as chain_decorator,
+)
 
 from compose2kube.benchmark.grader import chains_grade
 from compose2kube.benchmark.grader.rule import INPUTS_JUDGES
@@ -31,6 +34,7 @@ def _join_manifests(xs: list[dict | str]) -> str:
         raise ValueError(f"argument must be list[dit|str]: {xs}")
 
 
+@chain_decorator
 def dedoc(doc: Document) -> str:
     return doc.page_content
 
