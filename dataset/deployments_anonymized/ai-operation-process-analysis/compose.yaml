@@ -1,0 +1,5 @@
+include:
+  - ./act-sdk/docker-compose.yml
+  - ./mode_receive/docker-compose.yml
+  - ./postgres/compose.yaml
+  - ./superset/compose.yaml

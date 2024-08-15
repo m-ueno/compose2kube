@@ -1,0 +1,15 @@
+services:
+  web:
+    image: $IMAGE_REGISTRY/$IMAGE_REPOSITORY:$IMAGE_VERSION
+    container_name: rule-editor
+    # user: '${UID}:${GID}'
+    restart: always
+    environment:
+      - http_proxy=$IMAGE_PROXY
+      - HTTP_PROXY=$IMAGE_PROXY
+      - https_proxy=$IMAGE_PROXY
+      - HTTPS_PROXY=$IMAGE_PROXY
+      - TZ=Asia/Tokyo
+    ports:
+      - $IMAGE_PORT:10081
+    command: ["sh", "/workspace/analyzer-web/compose_entrypoint.sh"]

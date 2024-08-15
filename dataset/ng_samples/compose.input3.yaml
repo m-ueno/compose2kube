@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:13.9-bullseye
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: postgres
+    expose:
+      - "5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+  bff:
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/db
+      - DATASET_SELECT_MODE=${DATASET_SELECT_MODE:?err}
+      - UPLOAD_DIR=/user_experiment
+    env_file:
+      - .env
+    image: ml-webapp-api
+    restart: always
+    ports:
+      - "10999"
+    volumes:
+      - type: volume
+        source: user_experiment
+        target: /user_experiment
+volumes:
+  db_data:

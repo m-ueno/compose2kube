@@ -1,0 +1,21 @@
+version: '3.2'
+services:
+  # サーバーアプリ
+  act-sdk_app:
+    build:
+      context: .
+      dockerfile: app_container/Dockerfile
+  act-sdk_exec:
+    build:
+      context: .
+      target: ${ARCH}_stage
+      args:
+        USER: ${USER}
+        GROUP: ${GROUP}
+        UID: ${EXEC_UID}
+        GID: ${EXEC_GID}
+        HTTP_PROXY: ${ENV_HTTP_PROXY}
+        http_proxy: ${env_http_proxy}
+        HTTPS_PROXY: ${ENV_HTTPS_PROXY}
+        https_proxy: ${env_https_proxy}
+      dockerfile: exec_container/Dockerfile

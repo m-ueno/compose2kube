@@ -1,0 +1,32 @@
+version: '3.7'
+
+services:
+  faief:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: faief
+      args:
+        - proxy=${proxy}
+        - cert_mode=${CERTIFICATION}
+        - storage=${STORAGE}
+    tty: true
+    restart: ${faief_restart:-no}
+    ports:
+      - published: 80
+        target: 80
+        protocol: tcp
+        mode: host  
+      - published: 443
+        target: 443
+        protocol: tcp
+        mode: host
+    environment:
+        - MY_URL
+    healthcheck:
+          test: ["CMD", "/root/check_health.sh"]
+          interval: 10s
+          timeout: 10s
+          retries: 10
+          start_period: 10s
+    image: ${REGISTRY}/${REPO}:${VERSION}

@@ -1,0 +1,22 @@
+version: '3'
+services:
+  mode_receive:
+    build: .
+    tty: true
+    image: $REGISTRY/$REPOSITORY/mode_receive_pg:v0.0.6
+    restart: always
+    environment:
+      TRACE_MODE: ${TRACE_MODE}
+      AIIPF_COMPO: ${AIIPF_COMPO}
+      ACTSDK_RESTAPI: ${ACTSDK_RESTAPI}
+      DB_CONNECT_STR: ${DB_CONNECT_STR}
+      ACT_ID: ${ACT_ID}
+      TABLE_NAME: ${TABLE_NAME}
+      MODE_ADDR: ${MODE_ADDR}
+      MODE_TOKEN: ${MODE_TOKEN}
+    depends_on:
+      act-sdk_exec:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+        restart: true

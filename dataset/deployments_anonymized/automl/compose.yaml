@@ -1,0 +1,116 @@
+services:
+  db:
+    image: postgres:13.9-bullseye
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: postgres
+    expose:
+      - "5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+  webapp:
+    image: ${REGISTRY}/${REPOSITORY}/nginx:${TAG:-latest}
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "${ML_WEBAPP_PORT:?err}:80"
+
+  bff:
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/db
+      - DATASET_SELECT_MODE=${DATASET_SELECT_MODE:?err}
+      - UPLOAD_DIR=/user_experiment
+    env_file:
+      - .env
+    image: ${REGISTRY}/${REPOSITORY}/ml-webapp-api:${TAG:-latest}
+    restart: always
+    ports:
+      - "10999"
+    volumes:
+      - type: volume
+        source: user_experiment
+        target: /user_experiment
+
+  backend:
+    environment:
+      - DATASET_SELECT_MODE=${DATASET_SELECT_MODE:?err}
+      - API_HOST=bff
+      - API_PORT=10999
+      - API_BASEPATH=/api
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN:?err}
+      - JUPYTER_DIR=/user_experiment
+      - PYTHONPATH=/AutoML/sapientml
+      - ML_CLIENT_ID=${ML_CLIENT_ID}
+      - ML_CLIENT_SECRET=${ML_CLIENT_SECRET}
+    env_file:
+      - .env
+    restart: always
+    image: ${REGISTRY}/${REPOSITORY}/ml-webapp-backend:${TAG:-latest}
+    command: [ "python", "/AutoML/main.py" ]
+    volumes:
+      - type: volume
+        source: user_experiment
+        target: "/user_experiment"
+
+  notebook:
+    environment:
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN:?err}
+      - JUPYTERHUB_SERVICE_PREFIX="/jupyter/"
+    env_file:
+      - .env
+    ports:
+      - "8888"
+    image: ${REGISTRY}/${REPOSITORY}/ml-webapp-runner:${TAG:-latest}
+    restart: always
+    cpu_count: 1
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -O - http://127.0.0.1:8888/jupyter/lab || exit 1"
+        ]
+      start_period: "10s"
+      retries: 3
+      timeout: "5s"
+      interval: "30s"
+    volumes:
+      - type: volume
+        source: user_experiment
+        target: "/home/jovyan/work"
+
+  streamlit:
+    environment:
+      - API_HOST=bff
+      - API_PORT=10999
+      - API_BASEPATH=/api
+    env_file:
+      - .env
+    ports:
+      - "8501"
+    image: ${REGISTRY}/${REPOSITORY}/ml-webapp-streamlit:${TAG:-latest}
+    restart: always
+    cpu_count: 1
+    volumes:
+      - type: volume
+        source: user_experiment
+        target: "/data"
+
+  table-integration:
+    image: ${REGISTRY}/${REPOSITORY}/table_integration_app:1.0.0
+    restart: always
+    command: streamlit run app.py --server.baseUrlPath=/table-integration
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -O - http://127.0.0.1:8001/table-integration || exit 1"
+        ]
+      start_period: "10s"
+      retries: 3
+      timeout: "5s"
+      interval: "30s"
+
+volumes:
+  db_data:
+  user_experiment:

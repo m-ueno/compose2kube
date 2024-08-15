@@ -1,0 +1,38 @@
+name: faief
+services:
+  faief:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        cert_mode: ""
+        proxy: ""
+        storage: ""
+      target: faief
+    environment:
+      MY_URL: null
+    healthcheck:
+      test:
+      - CMD
+      - /root/check_health.sh
+      timeout: 10s
+      interval: 10s
+      retries: 10
+      start_period: 10s
+    image: registry.example.com/deployments/faief:latest
+    networks:
+      default: null
+    ports:
+    - mode: host
+      target: 80
+      published: "80"
+      protocol: tcp
+    - mode: host
+      target: 443
+      published: "443"
+      protocol: tcp
+    restart: "no"
+    tty: true
+networks:
+  default:
+    name: faief_default

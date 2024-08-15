@@ -1,0 +1,68 @@
+services:
+  web:
+    image: $IMAGE_REGISTRY/$IMAGE_REPOSITORY:$IMAGE_VERSION
+    container_name: rule-editor
+    # user: '${UID}:${GID}'
+    restart: always
+    environment:
+      - http_proxy=$IMAGE_PROXY
+      - HTTP_PROXY=$IMAGE_PROXY
+      - https_proxy=$IMAGE_PROXY
+      - HTTPS_PROXY=$IMAGE_PROXY
+      - TZ=Asia/Tokyo
+    ports:
+      - $IMAGE_PORT:10081
+    command: ["sh", "/workspace/analyzer-web/compose_entrypoint.sh"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      - data
+      - rules
+      - tools
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      - rule-editor-bin:/workspace/analyzer-lib/bin
+      - rule-editor-timeseries-rules:/workspace/analyzer-lib/src/analyzer/parts/timeseries_eval
+      - rule-editor-log:/workspace/analyzer-web/logs
+
+      - rule-editor-data:/workspace/analyzer-web/media
+      - rule-editor-rules:/workspace/analyzer-web/static/analysis/rules/v2
+      - rule-editor-tools:/workspace/analyzer-web/tools/fsal_demo
+
+  data:
+    image: $IMAGE_REGISTRY/$IMAGE_REPOSITORY:internal-data
+    container_name: rule-editor-data
+    volumes:
+      - rule-editor-data:/workspace/analyzer-web/media
+
+  rules:
+    image: $IMAGE_REGISTRY/$IMAGE_REPOSITORY:internal-rules
+    container_name: rule-editor-rules
+    volumes:
+      - rule-editor-rules:/workspace/analyzer-web/static/analysis/rules/v2
+
+  tools:
+    image: $IMAGE_REGISTRY/$IMAGE_REPOSITORY:internal-tools
+    container_name: rule-editor-tools
+    volumes:
+      - rule-editor-tools:/workspace/analyzer-web/tools/fsal_demo
+
+volumes:
+  rule-editor-bin:
+    name: rule-editor-bin-volume
+  rule-editor-timeseries-rules:
+    name: rule-editor-timeseries-rules-volume
+  rule-editor-log:
+    name: rule-editor-log-volume
+  rule-editor-data:
+    name: rule-editor-data-volume
+  rule-editor-rules:
+    name: rule-editor-rules-volume
+  rule-editor-tools:
+    name: rule-editor-tools-volume

@@ -1,0 +1,16 @@
+services:
+  notebook:
+    ports:
+      - "8888"
+    image: ml-webapp-runner
+    restart: always
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -O - http://127.0.0.1:8888/jupyter/lab || exit 1"
+        ]
+      start_period: "10s"
+      retries: 3
+      timeout: "5s"
+      interval: "30s"

@@ -1,0 +1,178 @@
+name: analyzer-operation-process-analysis
+services:
+  act-sdk_app:
+    build:
+      context: /tmp/analyzer-operation-process-analysis/act-sdk
+      dockerfile: app_container/Dockerfile
+    image: registry.example.com/deployments/analyzer-operation-process-analysis/act-sdk_app:0.1.0-20230302
+    networks:
+      default: null
+    restart: always
+    tty: true
+    volumes:
+    - type: volume
+      source: workspace_app
+      target: /workspace/app
+      volume: {}
+  act-sdk_exec:
+    build:
+      context: /tmp/analyzer-operation-process-analysis/act-sdk
+      dockerfile: exec_container/Dockerfile
+      args:
+        GID: "1001"
+        GROUP: azureuser
+        UID: "1000"
+        USER: ubuntu
+      target: x64_stage
+    cap_add:
+    - SYS_ADMIN
+    depends_on:
+      act-sdk_app:
+        condition: service_started
+        required: true
+    entrypoint:
+    - /bin/sh
+    - -c
+    - ' cd /workspace/app/src && python3 SampleApp.py '
+    environment:
+      PYTHONPATH: /workspace/app-base/src:/workspace
+    image: registry.example.com/deployments/analyzer-operation-process-analysis/act-sdk_exec:0.1.0-20230302
+    networks:
+      default: null
+    ports:
+    - mode: ingress
+      target: 8002
+      published: "4004"
+      protocol: tcp
+    - mode: ingress
+      target: 5003
+      published: "4005"
+      protocol: tcp
+    restart: always
+    security_opt:
+    - seccomp:unconfined
+    tty: true
+    volumes:
+    - type: volume
+      source: workspace_app
+      target: /workspace/app
+      volume: {}
+    - type: bind
+      source: /tmp/analyzer-operation-process-analysis/act-sdk/log
+      target: /workspace/app/exec/log
+      bind:
+        create_host_path: true
+    - type: bind
+      source: /tmp/analyzer-operation-process-analysis/act-sdk/app_container/src
+      target: /workspace/app/src
+      bind:
+        create_host_path: true
+    - type: bind
+      source: /tmp/analyzer-operation-process-analysis/act-sdk/app_container/app-base
+      target: /workspace/app-base
+      bind:
+        create_host_path: true
+    - type: bind
+      source: /tmp/analyzer-operation-process-analysis/act-sdk/app_container/analyzer
+      target: /workspace/analyzer
+      bind:
+        create_host_path: true
+    - type: bind
+      source: /tmp/analyzer-operation-process-analysis/act-sdk/app_container/configs
+      target: /workspace/app/exec/configs
+      bind:
+        create_host_path: true
+    - type: bind
+      source: /tmp/analyzer-operation-process-analysis/act-sdk/add_components/websocket_sv
+      target: /workspace/app-base/src/app_base/parts/websocket_sv
+      bind:
+        create_host_path: true
+  mode_receive:
+    build:
+      context: /tmp/analyzer-operation-process-analysis/mode_receive
+      dockerfile: Dockerfile
+    depends_on:
+      act-sdk_exec:
+        condition: service_started
+        required: true
+      postgres:
+        condition: service_healthy
+        restart: true
+        required: true
+    environment:
+      ACT_ID: IE_COMPO
+      ACTSDK_RESTAPI: http://act-sdk_exec:4004/api
+      AIIPF_COMPO: IE
+      DB_CONNECT_STR: dbname=postgres user=postgres password=postgre host=postgres
+        port=5432
+      MODE_ADDR: wss://api.example.com/homes/
+      MODE_TOKEN: ""
+      TABLE_NAME: analysis_result
+      TRACE_MODE: "FALSE"
+    image: registry.example.com/deployments/analyzer-operation-process-analysis/mode_receive_pg:v0.0.6
+    networks:
+      default: null
+    restart: always
+    tty: true
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: postgre
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready
+      timeout: 30s
+      interval: 1m0s
+      retries: 5
+      start_period: 10s
+    image: postgres
+    networks:
+      default: null
+    ports:
+    - mode: ingress
+      target: 5432
+      published: "5432"
+      protocol: tcp
+    restart: always
+    tty: true
+    volumes:
+    - type: volume
+      source: pgsql-data
+      target: /var/lib/postgresql/data
+      volume: {}
+  superset:
+    command:
+    - /entrypoint.sh
+    environment:
+      SUPERSET_SECRET_KEY: superset
+      TALISMAN_ENABLED: "false"
+    image: apache/superset:2.1.0
+    networks:
+      default: null
+    ports:
+    - mode: ingress
+      target: 8088
+      published: "8088"
+      protocol: tcp
+    restart: always
+    volumes:
+    - type: bind
+      source: /tmp/analyzer-operation-process-analysis/superset/entrypoint.sh
+      target: /entrypoint.sh
+      read_only: true
+      bind:
+        create_host_path: true
+    - type: volume
+      source: superset_home
+      target: /app/superset_home
+      volume: {}
+networks:
+  default:
+    name: analyzer-operation-process-analysis_default
+volumes:
+  pgsql-data:
+    name: analyzer-operation-process-analysis_pgsql-data
+  superset_home:
+    name: analyzer-operation-process-analysis_superset_home
+  workspace_app:
+    name: analyzer-operation-process-analysis_workspace_app

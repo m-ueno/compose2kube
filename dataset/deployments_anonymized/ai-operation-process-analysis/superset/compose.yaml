@@ -1,0 +1,15 @@
+services:
+  superset:
+    image: apache/superset:2.1.0
+    environment:
+      SUPERSET_SECRET_KEY: superset
+      TALISMAN_ENABLED: False
+    ports:
+      - 8088:8088
+    restart: always
+    volumes:
+      - ./entrypoint.sh:/entrypoint.sh:ro
+      - superset_home:/app/superset_home
+    command: /entrypoint.sh
+volumes:
+  superset_home:

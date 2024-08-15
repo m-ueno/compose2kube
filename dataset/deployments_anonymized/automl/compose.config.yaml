@@ -1,0 +1,184 @@
+name: automl
+services:
+  backend:
+    command:
+    - python
+    - /AutoML/main.py
+    environment:
+      API_BASEPATH: /api
+      API_HOST: bff
+      API_PORT: "10999"
+      DATASET_SELECT_MODE: UPLOAD
+      JUPYTER_DIR: /user_experiment
+      JUPYTER_TOKEN: "1234567890"
+      ML_CLIENT_ID: 123abc
+      ML_CLIENT_SECRET: clientsecret
+      ML_WEBAPP_PORT: "10000"
+      PYTHONPATH: /AutoML/sapientml
+      REACT_APP_BASIC_PASSWORD: ""
+      REACT_APP_BASIC_USERNAME: ""
+      REACT_APP_ENABLE_BASIC_AUTH: ""
+      REGISTRY: registry.example.com
+      REPOSITORY: deployments/ml
+      TAG: 0.5.1
+    image: registry.example.com/deployments/ml/ml-webapp-backend:0.5.1
+    networks:
+      default: null
+    restart: always
+    volumes:
+    - type: volume
+      source: user_experiment
+      target: /user_experiment
+  bff:
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/db
+      DATASET_SELECT_MODE: UPLOAD
+      JUPYTER_TOKEN: "1234567890"
+      ML_CLIENT_ID: 123abc
+      ML_CLIENT_SECRET: clientsecret
+      ML_WEBAPP_PORT: "10000"
+      REACT_APP_BASIC_PASSWORD: ""
+      REACT_APP_BASIC_USERNAME: ""
+      REACT_APP_ENABLE_BASIC_AUTH: ""
+      REGISTRY: registry.example.com
+      REPOSITORY: deployments/ml
+      TAG: 0.5.1
+      UPLOAD_DIR: /user_experiment
+    image: registry.example.com/deployments/ml/ml-webapp-api:0.5.1
+    networks:
+      default: null
+    ports:
+    - mode: ingress
+      target: 10999
+      protocol: tcp
+    restart: always
+    volumes:
+    - type: volume
+      source: user_experiment
+      target: /user_experiment
+  db:
+    environment:
+      POSTGRES_PASSWORD: postgres
+    expose:
+    - "5432"
+    image: postgres:13.9-bullseye
+    networks:
+      default: null
+    restart: always
+    volumes:
+    - type: volume
+      source: db_data
+      target: /var/lib/postgresql/data
+      volume: {}
+  notebook:
+    cpu_count: 1
+    environment:
+      DATASET_SELECT_MODE: UPLOAD
+      JUPYTER_TOKEN: "1234567890"
+      JUPYTERHUB_SERVICE_PREFIX: '"/jupyter/"'
+      ML_CLIENT_ID: 123abc
+      ML_CLIENT_SECRET: clientsecret
+      ML_WEBAPP_PORT: "10000"
+      REACT_APP_BASIC_PASSWORD: ""
+      REACT_APP_BASIC_USERNAME: ""
+      REACT_APP_ENABLE_BASIC_AUTH: ""
+      REGISTRY: registry.example.com
+      REPOSITORY: deployments/ml
+      TAG: 0.5.1
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -O - http://127.0.0.1:8888/jupyter/lab || exit 1
+      timeout: 5s
+      interval: 30s
+      retries: 3
+      start_period: 10s
+    image: registry.example.com/deployments/ml/ml-webapp-runner:0.5.1
+    networks:
+      default: null
+    ports:
+    - mode: ingress
+      target: 8888
+      protocol: tcp
+    restart: always
+    volumes:
+    - type: volume
+      source: user_experiment
+      target: /home/jovyan/work
+  streamlit:
+    cpu_count: 1
+    environment:
+      API_BASEPATH: /api
+      API_HOST: bff
+      API_PORT: "10999"
+      DATASET_SELECT_MODE: UPLOAD
+      JUPYTER_TOKEN: "1234567890"
+      ML_CLIENT_ID: 123abc
+      ML_CLIENT_SECRET: clientsecret
+      ML_WEBAPP_PORT: "10000"
+      REACT_APP_BASIC_PASSWORD: ""
+      REACT_APP_BASIC_USERNAME: ""
+      REACT_APP_ENABLE_BASIC_AUTH: ""
+      REGISTRY: registry.example.com
+      REPOSITORY: deployments/ml
+      TAG: 0.5.1
+    image: registry.example.com/deployments/ml/ml-webapp-streamlit:0.5.1
+    networks:
+      default: null
+    ports:
+    - mode: ingress
+      target: 8501
+      protocol: tcp
+    restart: always
+    volumes:
+    - type: volume
+      source: user_experiment
+      target: /data
+  table-integration:
+    command:
+    - streamlit
+    - run
+    - app.py
+    - --server.baseUrlPath=/table-integration
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -O - http://127.0.0.1:8001/table-integration || exit 1
+      timeout: 5s
+      interval: 30s
+      retries: 3
+      start_period: 10s
+    image: registry.example.com/deployments/ml/table_integration_app:1.0.0
+    networks:
+      default: null
+    restart: always
+  webapp:
+    environment:
+      DATASET_SELECT_MODE: UPLOAD
+      JUPYTER_TOKEN: "1234567890"
+      ML_CLIENT_ID: 123abc
+      ML_CLIENT_SECRET: clientsecret
+      ML_WEBAPP_PORT: "10000"
+      REACT_APP_BASIC_PASSWORD: ""
+      REACT_APP_BASIC_USERNAME: ""
+      REACT_APP_ENABLE_BASIC_AUTH: ""
+      REGISTRY: registry.example.com
+      REPOSITORY: deployments/ml
+      TAG: 0.5.1
+    image: registry.example.com/deployments/ml/nginx:0.5.1
+    networks:
+      default: null
+    ports:
+    - mode: ingress
+      target: 80
+      published: "10000"
+      protocol: tcp
+    restart: always
+networks:
+  default:
+    name: automl_default
+volumes:
+  db_data:
+    name: automl_db_data
+  user_experiment:
+    name: automl_user_experiment

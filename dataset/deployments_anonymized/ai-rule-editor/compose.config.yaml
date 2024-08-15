@@ -1,0 +1,116 @@
+name: rule-editor
+services:
+  data:
+    container_name: rule-editor-data
+    image: registry.example.com/deployments/rule-editor:internal-data
+    networks:
+      default: null
+    volumes:
+    - type: volume
+      source: rule-editor-data
+      target: /workspace/analyzer-web/media
+      volume: {}
+  rules:
+    container_name: rule-editor-rules
+    image: registry.example.com/deployments/rule-editor:internal-rules
+    networks:
+      default: null
+    volumes:
+    - type: volume
+      source: rule-editor-rules
+      target: /workspace/analyzer-web/static/analysis/rules/v2
+      volume: {}
+  tools:
+    container_name: rule-editor-tools
+    image: registry.example.com/deployments/rule-editor:internal-tools
+    networks:
+      default: null
+    volumes:
+    - type: volume
+      source: rule-editor-tools
+      target: /workspace/analyzer-web/tools/fsal_demo
+      volume: {}
+  web:
+    command:
+    - sh
+    - /workspace/analyzer-web/compose_entrypoint.sh
+    container_name: rule-editor
+    depends_on:
+      data:
+        condition: service_started
+        required: true
+      rules:
+        condition: service_started
+        required: true
+      tools:
+        condition: service_started
+        required: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - capabilities:
+            - gpu
+            driver: nvidia
+            count: 1
+    environment:
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      TZ: Asia/Tokyo
+      http_proxy: ""
+      https_proxy: ""
+    image: registry.example.com/deployments/rule-editor:internal-2.4.3
+    networks:
+      default: null
+    ports:
+    - mode: ingress
+      target: 10081
+      published: "80"
+      protocol: tcp
+    restart: always
+    volumes:
+    - type: bind
+      source: /var/run/docker.sock
+      target: /var/run/docker.sock
+      bind:
+        create_host_path: true
+    - type: volume
+      source: rule-editor-bin
+      target: /workspace/analyzer-lib/bin
+      volume: {}
+    - type: volume
+      source: rule-editor-timeseries-rules
+      target: /workspace/analyzer-lib/src/analyzer/parts/timeseries_eval
+      volume: {}
+    - type: volume
+      source: rule-editor-log
+      target: /workspace/analyzer-web/logs
+      volume: {}
+    - type: volume
+      source: rule-editor-data
+      target: /workspace/analyzer-web/media
+      volume: {}
+    - type: volume
+      source: rule-editor-rules
+      target: /workspace/analyzer-web/static/analysis/rules/v2
+      volume: {}
+    - type: volume
+      source: rule-editor-tools
+      target: /workspace/analyzer-web/tools/fsal_demo
+      volume: {}
+networks:
+  default:
+    name: rule-editor_default
+volumes:
+  rule-editor-bin:
+    name: rule-editor-bin-volume
+  rule-editor-data:
+    name: rule-editor-data-volume
+  rule-editor-log:
+    name: rule-editor-log-volume
+  rule-editor-rules:
+    name: rule-editor-rules-volume
+  rule-editor-timeseries-rules:
+    name: rule-editor-timeseries-rules-volume
+  rule-editor-tools:
+    name: rule-editor-tools-volume
