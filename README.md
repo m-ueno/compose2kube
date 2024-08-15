@@ -1,12 +1,24 @@
 # compose2kube
 
-A package for converting existing compose files to kube manifests.
+Experiment code to synthesis Kubernetes manifests from compose specifications using LLMs.
 
-## CLI usage
+## Description
 
-Place the input data in `./data`.
+- `dataset/`: Contains additional files and resources related to the project.
+- `notebooks/`: Contains Jupyter notebooks for running benchmarks.
+- `src/`: Contains the source code for the project.
+    - [src/compose2kube/benchmark/grader/rule.py](src/compose2kube/benchmark/grader/rule.py) : micro-benchmark rules
+    - [src/compose2kube/benchmark/grader/llm.py](src/compose2kube/benchmark/grader/llm.py) : context-groundedness evaluation prompt
 
-```
-poetry install
-poetry run python -m compose2kube --help
+## Running benchmarks
+
+### Requirements
+
+- Python>=3.10
+- Poetry>=1.8.3
+- `OPENAI_API_KEY`
+
+```shell
+$ poetry install
+open notebooks/*.ipynb and run
 ```
